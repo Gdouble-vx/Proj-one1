@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SDN AI Dashboard — PPO + GNN Routing Optimization</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; }
+  .glow { text-shadow: 0 0 24px rgba(139, 92, 246, 0.55); }
+  .card { background: linear-gradient(160deg, rgba(30,41,59,.55), rgba(15,23,42,.85)); }
+  .stat-num { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+
+<div class="max-w-6xl mx-auto px-6 py-10">
+
+  <!-- ═══════════ Header ═══════════ -->
+  <header class="mb-8">
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-3xl">🌐</span>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">
+        Autonomous SDN Routing Optimization
+      </h1>
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/40">
+        PPO + GNN
+      </span>
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+        ONOS Controller
+      </span>
+    </div>
+    <p class="mt-2 text-slate-400 text-sm">
+      Deep Reinforcement Learning ปรับค่าน้ำหนักลิงก์แบบ Closed-Loop ผ่าน REST API
+      — Mininet 14 โหนด / 50 ลิงก์ · Benchmark: Dijkstra vs ECMP vs Vanilla PPO vs PPO+GNN
+    </p>
+  </header>
+
+  <!-- ═══════════ Warning banner ═══════════ -->
+  <div id="warn-banner" class="hidden mb-8 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+    ⚠️ <b>ตัวเลข PPO+GNN / Vanilla PPO ยังเป็นค่าตัวอย่าง</b> (ยังไม่ได้รันบนเครื่อง ML)
+    — หลังรัน <code class="text-amber-100">benchmark_compare.py</code> แล้ว ให้คัดลอก
+    <code class="text-amber-100">results/benchmark_results.json</code> มาวางข้างไฟล์นี้
+    (หรือแก้ค่าใน <code class="text-amber-100">DATA.benchmark</code> ด้านบนไฟล์) กราฟจะอัปเดตให้อัตโนมัติ
+  </div>
+
+  <!-- ═══════════ Stat cards ═══════════ -->
+  <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-10">
+    <div class="card rounded-2xl border border-slate-800 p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wider">Topology</div>
+      <div class="stat-num text-2xl font-bold text-white mt-1">14 <span class="text-sm text-slate-400">nodes</span></div>
+      <div class="stat-num text-slate-300 text-sm">50 links</div>
+    </div>
+    <div class="card rounded-2xl border border-slate-800 p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wider">Training (จากศูนย์)</div>
+      <div class="stat-num text-2xl font-bold text-rose-400 mt-1">100k <span class="text-sm text-slate-400">steps</span></div>
+      <div class="text-slate-300 text-sm">≈ 29.2 ชม. · ~1 FPS</div>
+    </div>
+    <div class="card rounded-2xl border border-slate-800 p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wider">Fine-Tune (เป้าหมาย)</div>
+      <div class="stat-num text-2xl font-bold text-emerald-400 mt-1">15–30 <span class="text-sm text-slate-400">นาที</span></div>
+      <div class="text-slate-300 text-sm">Transfer + Freeze GNN</div>
+    </div>
+    <div class="card rounded-2xl border border-slate-800 p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wider">Dijkstra · Packet Loss</div>
+      <div class="stat-num text-2xl font-bold text-slate-300 mt-1">9.75<span class="text-sm text-slate-400">%</span></div>
+      <div class="text-slate-300 text-sm">รันจริง (FastSDNEnv)</div>
+    </div>
+    <div class="card rounded-2xl border border-slate-800 p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wider">ECMP · Packet Loss</div>
+      <div class="stat-num text-2xl font-bold text-amber-400 mt-1">2.36<span class="text-sm text-slate-400">%</span></div>
+      <div class="text-slate-300 text-sm">รันจริง (FastSDNEnv)</div>
+    </div>
+    <div class="card rounded-2xl border border-violet-500/30 p-4">
+      <div class="text-xs text-violet-300 uppercase tracking-wider">PPO+GNN · Packet Loss</div>
+      <div id="stat-ppognn-loss" class="stat-num text-2xl font-bold text-violet-300 mt-1">—</div>
+      <div class="text-slate-400 text-sm">รอผลการรันจริง</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ Benchmark charts ═══════════ -->
+  <section class="mb-10">
+    <h2 class="text-xl font-bold text-white mb-1">📊 Benchmark เปรียบเทียบประสิทธิภาพ</h2>
+    <p class="text-slate-400 text-sm mb-4">
+      20 episodes · scenario เดียวกันทุก method (fix seed) · 14 nodes / 50 links / 12 flows
+      (ค่าของ Dijkstra/ECMP = ผลรันจริงจาก FastSDNEnv, PPO = ตัวอย่าง)
+    </p>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card rounded-2xl border border-slate-800 p-4">
+        <canvas id="chart-throughput" height="120"></canvas>
+      </div>
+      <div class="card rounded-2xl border border-slate-800 p-4">
+        <canvas id="chart-latency" height="120"></canvas>
+      </div>
+      <div class="card rounded-2xl border border-slate-800 p-4">
+        <canvas id="chart-loss" height="120"></canvas>
+      </div>
+      <div class="card rounded-2xl border border-slate-800 p-4">
+        <canvas id="chart-reward" height="120"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ Summary table ═══════════ -->
+  <section class="mb-10">
+    <h2 class="text-xl font-bold text-white mb-4">🧾 ตารางสรุปผล</h2>
+    <div class="overflow-x-auto rounded-2xl border border-slate-800">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-900 text-slate-400 uppercase text-xs tracking-wider">
+          <tr>
+            <th class="px-4 py-3 text-left">Method</th>
+            <th class="px-4 py-3 text-right">Throughput (Mbps)</th>
+            <th class="px-4 py-3 text-right">Latency (ms)</th>
+            <th class="px-4 py-3 text-right">Packet Loss (%)</th>
+            <th class="px-4 py-3 text-right">Reward</th>
+            <th class="px-4 py-3 text-center">สถานะ</th>
+          </tr>
+        </thead>
+        <tbody id="benchmark-table" class="divide-y divide-slate-800"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════ Transfer learning ═══════════ -->
+  <section class="grid lg:grid-cols-2 gap-6 mb-10">
+    <div class="card rounded-2xl border border-slate-800 p-5">
+      <h2 class="text-lg font-bold text-white mb-4">⚡ Transfer Learning — ลดเวลาฝึก 98%+</h2>
+      <canvas id="chart-time" height="150"></canvas>
+      <ul class="mt-4 space-y-2 text-sm text-slate-300">
+        <li>① <b class="text-cyan-300">Pretrain</b> บน FastSDNEnv (simulator) — 10k steps</li>
+        <li>② <b class="text-violet-300">Freeze</b> GNN feature extractor (คงความรู้เรื่องกราฟ)</li>
+        <li>③ <b class="text-emerald-300">Fine-tune</b> policy head บน ONOS จริง — 2k–5k steps, lr=1e-4</li>
+      </ul>
+    </div>
+    <div class="card rounded-2xl border border-slate-800 p-5">
+      <h2 class="text-lg font-bold text-white mb-4">🏗️ สถาปัตยกรรม</h2>
+      <div class="space-y-3 text-sm text-slate-300">
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 px-4 py-3">
+          <b class="text-cyan-300">GNN Encoder</b> (GATConv 1→16 → 16→32 + global mean pool)
+          — บีบอัดสถานะ topology เป็น state vector 32 มิติ
+        </div>
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 px-4 py-3">
+          <b class="text-violet-300">Policy Head</b> (MLP 64-64) → action = น้ำหนักลิงก์ 50 ค่า [1,100]
+        </div>
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 px-4 py-3">
+          <b class="text-emerald-300">Closed-Loop</b> POST น้ำหนัก → ONOS REST API
+          → วัด Throughput / Latency / Packet Loss → Reward = throughput<sup>1.2</sup>/latency − penalty
+        </div>
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 px-4 py-3">
+          <b class="text-amber-300">ทำไม ONOS?</b> REST API พร้อมใช้ (devices/links/config),
+          รองรับ SDN-IP และการปรับ link cost แบบไดนามิก
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ Footer ═══════════ -->
+  <footer class="text-center text-xs text-slate-500 border-t border-slate-800 pt-6">
+    Autonomous SDN Routing Optimization using PPO &amp; Graph Neural Networks on ONOS Controller ·
+    ข้อมูลอัปเดตจาก <code>benchmark_results.json</code> · โค้ด: github.com/Gdouble-vx/Proj-one1
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA — แก้ไขตรงนี้ได้โดยตรง (หรือวาง results/benchmark_results.json ข้างไฟล์นี้)
+//  ตัวเลข Dijkstra / ECMP = ผลรันจริงจาก FastSDNEnv (benchmark_compare.py)
+//  ตัวเลข vanilla / ppognn = ตัวอย่างเท่านั้น (ยังไม่ใช่ผลจริง)
+// ═══════════════════════════════════════════════════════════════════════════
+const DATA = {
+  benchmark: {
+    dijkstra: { throughput: 2759.4, latency: 8.01, packet_loss: 9.75, reward: 0.0208, real: true },
+    ecmp:     { throughput: 2991.0, latency: 1.59, packet_loss: 2.36, reward: 0.0982, real: true },
+    vanilla:  { throughput: 2950.0, latency: 2.40, packet_loss: 4.20, reward: 0.0600, real: false },
+    ppognn:   { throughput: 3050.0, latency: 1.70, packet_loss: 0.80, reward: 0.0900, real: false },
+  },
+  training: {
+    fromScratchHours: 29.2,   // 100k steps บน ONOS/Mininet จริง (~1 FPS)
+    finetuneHours: 0.5,       // เป้าหมาย: 2k–5k steps (15–30 นาที)
+  },
+};
+
+const METHODS = [
+  { key: 'dijkstra', label: 'Dijkstra / OSPF', color: '#64748b' },
+  { key: 'ecmp',     label: 'ECMP',             color: '#f59e0b' },
+  { key: 'vanilla',  label: 'Vanilla PPO (MLP)', color: '#0ea5e9' },
+  { key: 'ppognn',   label: 'PPO + GNN (Proposed)', color: '#8b5cf6' },
+];
+
+// ── โหลดผลจริงจาก benchmark_results.json (ถ้ามี) ─────────────────────────
+function loadRealResults() {
+  return fetch('benchmark_results.json')
+    .then(r => { if (!r.ok) throw 0; return r.json(); })
+    .then(json => {
+      const b = json.stats || {};
+      for (const m of METHODS) {
+        if (b[m.key]) {
+          DATA.benchmark[m.key] = {
+            throughput: +b[m.key].throughput,
+            latency: +b[m.key].latency,
+            packet_loss: +b[m.key].packet_loss * 100,
+            reward: +b[m.key].reward,
+            real: true,
+          };
+        }
+      }
+      document.getElementById('warn-banner').classList.add('hidden');
+    })
+    .catch(() => {
+      // เปิดจาก file:// หรือยังไม่มี JSON → ใช้ DATA ข้างบน (แสดงแบนเนอร์เตือน)
+      const hasFake = METHODS.some(m => DATA.benchmark[m.key] && DATA.benchmark[m.key].real === false);
+      if (hasFake) document.getElementById('warn-banner').classList.remove('hidden');
+    });
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+let charts = {};
+function barChart(id, label, fmt, ylabel) {
+  const ctx = document.getElementById(id);
+  const ds = METHODS.map(m => {
+    const d = DATA.benchmark[m.key] || {};
+    return { label: m.label, data: [d[label] ?? 0], backgroundColor: m.color };
+  });
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: [''], datasets: ds },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#cbd5e1', boxWidth: 12, font: { size: 10 } } },
+        title: { display: true, text: ylabel, color: '#e2e8f0', font: { size: 13, weight: 'bold' } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { display: false }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.12)' } },
+      },
+    },
+  });
+}
+
+function render() {
+  const b = DATA.benchmark;
+  const fmt2 = v => v.toFixed(2), fmt1 = v => v.toFixed(1), fmt4 = v => v.toFixed(4);
+  barChart('chart-throughput', 'throughput', fmt1, 'Avg Throughput (Mbps) ↑');
+  barChart('chart-latency',   'latency',     fmt2, 'Avg Latency (ms) ↓');
+  barChart('chart-loss',      'packet_loss', fmt2, 'Avg Packet Loss (%) ↓');
+  barChart('chart-reward',    'reward',      fmt4, 'Avg Reward ↑');
+
+  // stat card
+  const pl = b.ppognn ? b.ppognn.packet_loss : null;
+  document.getElementById('stat-ppognn-loss').textContent =
+    (pl == null) ? '—' : pl.toFixed(2) + '%';
+
+  // table
+  const tbody = document.getElementById('benchmark-table');
+  tbody.innerHTML = '';
+  for (const m of METHODS) {
+    const d = b[m.key];
+    if (!d) continue;
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-900/50';
+    const status = d.real
+      ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">รันจริง</span>'
+      : '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">ตัวอย่าง</span>';
+    tr.innerHTML =
+      `<td class="px-4 py-2.5 font-semibold" style="color:${m.color}">${m.label}</td>` +
+      `<td class="px-4 py-2.5 text-right stat-num">${d.throughput.toFixed(1)}</td>` +
+      `<td class="px-4 py-2.5 text-right stat-num">${d.latency.toFixed(2)}</td>` +
+      `<td class="px-4 py-2.5 text-right stat-num">${d.packet_loss.toFixed(2)}</td>` +
+      `<td class="px-4 py-2.5 text-right stat-num">${d.reward.toFixed(4)}</td>` +
+      `<td class="px-4 py-2.5 text-center">${status}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  // transfer learning time chart
+  const ctx = document.getElementById('chart-time');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['From Scratch (100k steps)', 'Transfer Learning (2k–5k steps)'],
+      datasets: [{
+        label: 'เวลาฝึก (ชั่วโมง)',
+        data: [DATA.training.fromScratchHours, DATA.training.finetuneHours],
+        backgroundColor: ['#fb7185', '#34d399'],
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.parsed.x} ชม.` } },
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.12)' } },
+        y: { ticks: { color: '#cbd5e1' }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+loadRealResults().then(render);
+</script>
+</body>
+</html>
