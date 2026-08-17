@@ -1,0 +1,19 @@
+# ── VMware / VirtualBox images (ใหญ่ ~87GB อย่า push ขึ้น git) ─────────────
+*.vmdk
+*.vmx
+*.nvram
+*.vmsd
+*.vmxf
+*.vmem
+*.vmss
+*.lck
+*.scoreboard
+*.log
+mksSandbox*
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+
+# ── ผลลัพธ์จากการรัน (โมเดล + charts + logs — สร้างใหม่ได้) ──────────────
+results/

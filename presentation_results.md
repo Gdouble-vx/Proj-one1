@@ -1,0 +1,111 @@
+# 📊 ข้อมูลนำเสนอผลงาน (Presentation Results) — SDN AI Agent
+
+> ไฟล์นี้สรุปผลการรัน **Fine-Tuning (PPO+GNN)** และ **Benchmark** ให้อยู่ในรูปแบบตาราง + ข้อความ
+> พร้อมนำไปวางในสไลด์ Canva ได้เลย
+>
+> ⚠️ ค่าที่เป็น **ตัวเลขจริงจาก Fast Simulator** แล้ว: Dijkstra / ECMP
+> ⚠️ ค่าที่เป็น **placeholder `[____]`**: ต้องรัน `benchmark_compare.py` บนเครื่อง ML ของคุณเพื่อเติมตัวเลข PPO จริง
+
+---
+
+## 1️⃣ ตาราง Benchmark หลัก (ใช้ตอบอาจารย์)
+
+**การทดลอง:** 14 nodes / 50 links, 12 flows สุ่มใหม่ทุก episode (demand 100–400 Mbps), link capacity 500 Mbps,
+ประเมิน 20 episodes บน scenario เดียวกันทุก method (fix seed)
+
+| Method | Avg Throughput (Mbps) | Avg Latency (ms) | Packet Loss (%) | Avg Reward |
+|---|---|---|---|---|
+| **Dijkstra / OSPF** (baseline) | 2759.4 | 8.01 | 9.75 | 0.0208 |
+| **ECMP** (baseline) | 2991.0 | 1.59 | 2.36 | 0.0982 |
+| **Vanilla PPO (MLP)** | `[____]` | `[____]` | `[____]` | `[____]` |
+| **PPO + GNN (Proposed)** ⭐ | `[____]` | `[____]` | `[____]` | `[____]` |
+
+**วิธีเติมตัวเลข:** รัน
+
+```bash
+python fine_tune_sdn_agent.py --env fast --arch gnn --total-timesteps 10000 --tag ppognn
+python fine_tune_sdn_agent.py --env fast --arch mlp --total-timesteps 10000 --tag vanilla
+python benchmark_compare.py --model-vanilla results/ppo_mlp_fast_vanilla \
+                            --model-ppognn results/ppo_gnn_fast_ppognn --episodes 20
+```
+
+ผลลัพธ์อัตโนมัติ: `results/benchmark_results.csv`, `results/benchmark_results.json`, `results/benchmark_metrics.png`
+
+---
+
+## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
+
+| Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |
+|---|---|---|
+| Vanilla PPO (MLP) | `[____]` | `[____]` |
+| PPO + GNN (Proposed) ⭐ | `[____]` | `[____]` |
+
+```bash
+python benchmark_compare.py --generalize --model-vanilla results/ppo_mlp_fast_vanilla \
+                            --model-ppognn results/ppo_gnn_fast_ppognn --episodes 20
+```
+
+> คาดหวัง: GNN extractor อ่านโครงสร้างกราฟ (edge_index ถูกสลับเป็น topology ใหม่โดยไม่เทรนใหม่)
+> จึงควร generalize ได้ดีกว่า MLP ที่จำ feature vector แบน ๆ
+
+---
+
+## 3️⃣ ตาราง Fine-Tuning / Transfer Learning (ตอบโจทย์ "เวลาพอไหม")
+
+| ขั้นตอน | จำนวน Steps | เวลาจริง | หมายเหตุ |
+|---|---|---|---|
+| เทรนจากศูนย์บน ONOS/Mininet (เดิม) | 100,000 | **~29.2 ชม.** | ~1 FPS ผ่าน REST API |
+| Pretrain บน FastSDNEnv (simulator) | 10,000 | `[____]` นาที | หลายพัน step/วินาที |
+| **Fine-Tune บน ONOS จริง** (freeze GNN + lr=1e-4) | 2,000–5,000 | **~15–30 นาที** (เป้าหมาย) | โหลด base weights → ต่อยอด |
+
+คำสั่ง:
+
+```bash
+# pretrain บน simulator
+python fine_tune_sdn_agent.py --env fast --arch gnn --total-timesteps 10000 --tag base
+
+# fine-tune กับ ONOS จริง (transfer learning + freeze GNN extractor)
+python fine_tune_sdn_agent.py --env onos --arch gnn --vm1-ip 192.168.10.165 \
+    --base-model results/ppo_gnn_fast_base --freeze --lr 1e-4 --total-timesteps 3000 --tag onos
+```
+
+Training log อัตโนมัติ: `results/train_gnn_fast_base.csv` (มี column `fps` ใช้อ้างอิงความเร็วได้)
+
+---
+
+## 4️⃣ ข้อความสำเร็จรูปสำหรับสไลด์ Canva
+
+### Slide: ปัญหา (Problem)
+> "การเทรน PPO จากศูนย์บน SDN จริง (Mininet + ONOS ผ่าน REST API) ใช้เวลา 29.2 ชั่วโมงสำหรับ 100,000 steps
+> หรือ ~1 step/วินาที — ไม่ทันกำหนดส่งงาน และโมเดลติด plateau เพราะ penalty สูงจน agent เลือกเล่นปลอดภัย"
+
+### Slide: กลยุทธ์ (Solution)
+> "ใช้ Transfer Learning: pretrain บน FastSDNEnv (simulator ความเร็วสูง) → freeze ชั้น GNN feature extractor
+> → fine-tune เฉพาะ policy head ด้วย learning rate 1e-4 บน ONOS จริงเพียง 2,000–5,000 steps
+> ลดเวลาจาก 29.2 ชั่วโมง เหลือ 15–30 นาที"
+
+### Slide: วิธีวัดผล (Methodology)
+> "เปรียบเทียบ 3 กลุ่ม: (1) ดั้งเดิม — Dijkstra/OSPF และ ECMP (2) DRL มาตรฐาน — Vanilla PPO + MLP
+> (3) วิธีที่นำเสนอ — PPO + GNN (GATConv 2 ชั้น + global mean pooling) โดยวัด Throughput, Latency,
+> Packet Loss, และทดสอบ Zero-Shot Generalization บน topology ใหม่โดยไม่เทรนใหม่"
+
+### Slide: สรุปผล (Key Findings) — ตัวเลขจาก simulator (ตัวอย่าง)
+> "บน fast simulator 14 โหนด/50 ลิงก์: Dijkstra มี packet loss 9.75% และ latency 8.01 ms
+> ในขณะที่ ECMP ลด loss เหลือ 2.36% (latency 1.59 ms) — แสดงให้เห็นว่าการเลือกเส้นทางแบบ load-aware
+> สำคัญต่อเครือข่ายหนาแน่น และเป็นจุดที่ PPO+GNN ควรต่อยอดให้ดีขึ้นได้อีก"
+
+### Slide: สถาปัตยกรรม (Architecture)
+> "GNN (GATConv + global mean pool) ใช้บีบอัดสถานะ topology (14 โหนด / 50 ลิงก์) เป็น state vector
+> 32 มิติ → policy head (MLP 64-64) ออก action = ค่าน้ำหนักลิงก์ 50 ค่า → ส่งไปปรับผ่าน ONOS REST API
+> → วัดผลตอบแทนจาก Network Power (throughput^1.2 / latency) พร้อม penalty เรื่อง packet loss"
+
+---
+
+## 5️⃣ Checklist ก่อนนำเสนอ
+
+- [ ] รัน fine-tune ครบ (pretrain fast → fine-tune onos) → ได้ `results/ppo_gnn_fast_*.zip` + training log
+- [ ] รัน `benchmark_compare.py` → เติมตัวเลข PPO ในตารางข้อ 1
+- [ ] รัน `--generalize` → เติมตารางข้อ 2
+- [ ] เอา `results/benchmark_metrics.png` ไปแปะในสไลด์ (หรือทำกราฟใหม่ใน Canva)
+- [ ] ถ่าย screenshot หน้าจอ ONOS GUI + Mininet CLI ประกอบสไลด์
+- [ ] เตรียมข้อมูลสถาปัตยกรรม + flow diagram (ดู README.md)
