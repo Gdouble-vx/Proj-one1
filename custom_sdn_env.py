@@ -89,9 +89,10 @@ class CustomSDNEnv(gym.Env):
 
     def __init__(self, vm1_ip="192.168.10.165", num_nodes=14, max_links=50,
                  gnn_output_dim=32, obs_mode="raw", use_real_metrics=True,
-                 step_delay=0.1, seed=42):
+                 step_delay=2.5, seed=42):
         """obs_mode: "raw" = node+edge features ตรงกับ FastSDNEnv (สำหรับ policy-side GNN)
-                      "gnn" = observation ผ่าน GNN encoder ใน env (พฤติกรรมเดิม)"""
+                      "gnn" = observation ผ่าน GNN encoder ใน env (พฤติกรรมเดิม)
+        step_delay: ค่าเริ่มต้น 2.5s ตามของจริง (เป็นสาเหตุหลักของ ~1 FPS) — ตั้ง 0 ได้ถ้าต้องการเร็ว"""
         super(CustomSDNEnv, self).__init__()
         if not _HAS_PYG:
             raise ImportError("torch_geometric ไม่พร้อมใช้งาน — จำเป็นสำหรับ CustomSDNEnv")
@@ -105,6 +106,7 @@ class CustomSDNEnv(gym.Env):
         self.step_delay = step_delay
         self.seed = seed
         self.step_count = 0
+        self.prev_weights = {}              # 🔥 cache ค่าน้ำหนักเก่า → POST เฉพาะลิงก์ที่เปลี่ยน > 2.0
 
         # observation: node_feat(num_nodes) + edge_attr(max_links*2) เมื่อ raw
         if obs_mode == "raw":
@@ -137,8 +139,8 @@ class CustomSDNEnv(gym.Env):
         links_url = f"http://{self.vm1_ip}:8181/onos/v1/links"
 
         try:
-            devices_response = requests.get(devices_url, auth=self.auth, timeout=30)
-            links_response = requests.get(links_url, auth=self.auth, timeout=30)
+            devices_response = requests.get(devices_url, auth=self.auth, timeout=5)
+            links_response = requests.get(links_url, auth=self.auth, timeout=5)
             if devices_response.status_code != 200 or links_response.status_code != 200:
                 print(f"[ONOS] status devices={devices_response.status_code} "
                       f"links={links_response.status_code} — ใช้ topology ว่าง")
@@ -223,21 +225,26 @@ class CustomSDNEnv(gym.Env):
 
     # ------------------------------------------------------------------ apply
     def _apply_weights_to_onos(self, action):
-        """POST ค่าน้ำหนักลิงก์ใหม่ไปที่ ONOS network configuration"""
+        """POST ค่าน้ำหนักลิงก์ใหม่ไปที่ ONOS network configuration
+        🔥 ส่งเฉพาะลิงก์ที่ weight เปลี่ยน > 2.0 หรือครั้งแรก (ลด REST calls ลงมาก)"""
         try:
-            print(f"[AI Action - Step {self.step_count + 1}] อัปเดต Link Weights "
-                  f"({len(action)} ลิงก์)...")
             _, links = self._get_topology()
             device_ids = list(self.device_map.keys())
+            n_changed = 0
             for idx, (si, di, src_port, dst_port) in enumerate(links[: self.max_links]):
                 weight_value = float(action[idx])
-                src_device = device_ids[si]
-                dst_device = device_ids[di]
-                config_url = (f"http://{self.vm1_ip}:8181/onos/v1/network/configuration/"
-                              f"links/{src_device}/{src_port}-{dst_device}/{dst_port}")
-                payload = {"annotations": {"cost": str(weight_value)}}
-                requests.post(config_url, json=payload, auth=self.auth, timeout=30)
-            print("[ONOS Status] อัปเดตค่าน้ำหนักเส้นทางหนีคอขวดเสร็จสิ้น")
+                prev = self.prev_weights.get(idx)
+                if prev is None or abs(weight_value - prev) > 2.0:
+                    src_device = device_ids[si]
+                    dst_device = device_ids[di]
+                    config_url = (f"http://{self.vm1_ip}:8181/onos/v1/network/configuration/"
+                                  f"links/{src_device}/{src_port}-{dst_device}/{dst_port}")
+                    payload = {"annotations": {"cost": str(weight_value)}}
+                    requests.post(config_url, json=payload, auth=self.auth, timeout=5)
+                    self.prev_weights[idx] = weight_value
+                    n_changed += 1
+            print(f"[AI Action - Step {self.step_count + 1}] อัปเดต Link Weights "
+                  f"{n_changed} ลิงก์ (ข้าม {len(links[: self.max_links]) - n_changed} ที่ไม่เปลี่ยน)")
         except Exception as e:
             print(f"Error sending action to ONOS: {e}")
 
@@ -245,6 +252,7 @@ class CustomSDNEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.step_count = 0
+        self.prev_weights = {}
         observation = self._get_network_state_from_onos()
         return observation, {}
 

@@ -22,6 +22,15 @@ fine_tune_sdn_agent.py — PPO + GNN Fine-Tuning Pipeline สำหรับ Aut
 
   # 3) Vanilla PPO (MLP) สำหรับ benchmark
   python fine_tune_sdn_agent.py --env fast --arch mlp --total-timesteps 10000 --tag vanilla
+
+  # 4) 🔥 ประเมินโมเดล 100k steps เดิมของคุณ (GNN ใน env, action 200 ลิงก์) กับ ONOS จริง
+  python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+      --base-model vm_originals/SVs2/ppo_gnn_sdn_model --eval-only --eval-episodes 5
+
+  # 5) Fine-tune ต่อจากโมเดลเดิมของคุณ (obs_mode=gnn, lr=1e-4)
+  python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+      --base-model vm_originals/SVs2/ppo_gnn_sdn_model --lr 1e-4 \
+      --total-timesteps 3000 --tag resume
 """
 
 from __future__ import annotations
@@ -139,12 +148,16 @@ def build_env(args, monitor: bool = True):
                          num_links=args.num_links)
     else:
         env = CustomSDNEnv(vm1_ip=args.vm1_ip, num_nodes=args.num_nodes,
-                           max_links=args.num_links, obs_mode="raw")
+                           max_links=args.num_links, obs_mode=args.obs_mode)
     return Monitor(env) if monitor else env
 
 
 def build_policy_kwargs(env, args: argparse.Namespace) -> dict:
-    if args.arch == "gnn":
+    # ถ้า GNN อยู่ใน env แล้ว (obs_mode="gnn" = โมเดลเดิมของคุณ) policy ต้องเป็น MLP
+    use_gnn = args.arch == "gnn" and getattr(env, "obs_mode", "raw") != "gnn"
+    if args.arch == "gnn" and not use_gnn:
+        print("[Warn] env ใช้ obs_mode=gnn (GNN อยู่ใน env แล้ว) → policy เป็น MLP แทน")
+    if use_gnn:
         return {
             "features_extractor_class": SDNGraphFeatureExtractor,
             "features_extractor_kwargs": {
@@ -229,6 +242,10 @@ def main():
                         help="fast=จำลองเร็ว, onos=ONOS จริงผ่าน REST API")
     parser.add_argument("--arch", choices=["gnn", "mlp"], default="gnn",
                         help="gnn=PPO+GNN, mlp=Vanilla PPO")
+    parser.add_argument("--obs-mode", choices=["raw", "gnn"], default="raw",
+                        help="(เฉพาะ --env onos) raw=policy รัน GNN เอง, gnn=GNN ใน env (โมเดลเดิมของคุณ)")
+    parser.add_argument("--eval-only", action="store_true",
+                        help="ไม่เทรน — โหลด --base-model แล้วประเมินผลเท่านั้น")
     parser.add_argument("--vm1-ip", default="192.168.10.165", help="IP ของ VM ที่รัน ONOS")
     parser.add_argument("--total-timesteps", type=int, default=5000,
                         help="จำนวน step ที่จะเทรน (fine-tune แนะนำ 2,000–5,000)")
@@ -256,8 +273,21 @@ def main():
     if args.env == "fast":
         print(f"[Env] {env.env.sim.describe_topology()}")
     else:
-        print(f"[Env] ONOS จริงที่ http://{args.vm1_ip}:8181 (obs_mode=raw, "
+        print(f"[Env] ONOS จริงที่ http://{args.vm1_ip}:8181 (obs_mode={args.obs_mode}, "
               f"max_links={args.num_links})")
+
+    if args.eval_only:
+        if not args.base_model or not os.path.exists(args.base_model + ".zip"):
+            raise SystemExit("--eval-only ต้องระบุ --base-model ที่มีไฟล์ .zip อยู่")
+        print(f"[Eval-Only] โหลด {args.base_model}.zip แล้วประเมิน {args.eval_episodes} episodes")
+        model = PPO.load(args.base_model, env=env, device="auto")
+        eval_env = build_env(args, monitor=False)
+        stats = evaluate(eval_env, model, episodes=args.eval_episodes)
+        if stats:
+            print(f"[Eval-Summary] throughput={stats['throughput']:.1f} Mbps | "
+                  f"latency={stats['latency']:.2f} ms | loss={stats['packet_loss']:.4f} | "
+                  f"reward={stats['reward']:.6f}")
+        return
 
     model = build_model(env, args)
 

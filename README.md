@@ -13,10 +13,12 @@
 | `fine_tune_sdn_agent.py` | Pipeline หลัก: PPO+GNN, freeze layer, transfer learning, `--env fast\|onos` |
 | `benchmark_compare.py` | Benchmark: Dijkstra vs ECMP vs Vanilla PPO vs PPO+GNN + กราฟ |
 | `presentation_results.md` | ข้อมูลสรุปสำหรับสไลด์ Canva (ตาราง + ข้อความ) |
+| `vm_originals/` | โค้ด + โมเดลจริงที่ extract ออกจาก VM (SVs1 = Mininet/ONOS, SVs2 = AI brain) |
 | `results/` | output: โมเดล `.zip`, training log `.csv`, benchmark results + charts |
 
-> หมายเหตุ: ไฟล์เดิม `import gymnasium as gym.py` ถูก refactor ไปอยู่ใน `custom_sdn_env.py`
-> (เพิ่ม `obs_mode="raw"`, `max_links=50`, dedupe ลิงก์สองทิศทาง) — ลบไฟล์เดิมได้ถ้าต้องการ
+> หมายเหตุ: `custom_sdn_env.py` = merge ระหว่าง env เดิมของคุณ (`import gymnasium as gym.py`)
+> กับเวอร์ชันจริงใน VM (`vm_originals/SVs2/sdn_network_env.py`) — รวมการส่ง weight แบบ delta (>2.0),
+> timeout 5s, sleep 2.5s/step ตามของจริง + เพิ่ม `obs_mode="raw"` สำหรับ policy-side GNN
 
 ## ติดตั้ง (บนเครื่อง ML / VM ที่ใช้เทรน)
 
@@ -52,12 +54,26 @@ python fine_tune_sdn_agent.py --env fast --arch mlp --total-timesteps 10000 --ta
 curl -u onos:rocks http://<vm1-ip>:8181/onos/v1/devices   # ควรได้ JSON
 ```
 
+**แบบ A — โมเดลเดิมของคุณ (GNN ใน env, action 200 ลิงก์):**
+```bash
+# ประเมินโมเดล 100k steps ที่เทรนแล้ว
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model vm_originals/SVs2/ppo_gnn_sdn_model --eval-only --eval-episodes 5
+
+# Fine-tune ต่อ (resume) อีก 3,000 steps
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model vm_originals/SVs2/ppo_gnn_sdn_model --lr 1e-4 \
+    --total-timesteps 3000 --tag resume
+```
+
+**แบบ B — โมเดลใหม่ (policy-side GNN, 50 ลิงก์) ผ่าน transfer learning:**
 ```bash
 python fine_tune_sdn_agent.py --env onos --arch gnn --vm1-ip 192.168.10.165 \
     --base-model results/ppo_gnn_fast_base --freeze --lr 1e-4 \
     --total-timesteps 3000 --tag onos
 ```
 
+- `--obs-mode gnn` = observation ผ่าน GNN ใน env (โมเดลเดิม), `raw` = policy รัน GNN เอง
 - `--freeze` แช่แข็ง GNN extractor (เทรนเฉพาะ policy head)
 - `--base-model` โหลด weights จาก pretrain (transfer learning)
 - ถ้าไม่มี metrics server ที่ port 9999 ให้แก้ `use_real_metrics=False` ใน `custom_sdn_env.py`
@@ -82,6 +98,21 @@ Output: `results/benchmark_results.csv`, `results/benchmark_results.json`, `resu
 ### 4) เตรียมสไลด์
 
 เปิด `presentation_results.md` → เติมตัวเลขจริงจาก benchmark → วางลง Canva
+
+## โค้ดจริงจาก VM (`vm_originals/`)
+
+โค้ดที่ extract ออกมาจาก VM จริงของคุณ (ผ่าน SSH/SFTP, user `ino`):
+
+- `vm_originals/SVs1/` — **VM Mininet + ONOS** (192.168.10.165):
+  - `nn_topo_advanced.py` — topology 14 สวิตช์ 3 เลเยอร์ (4→6→4, 48 ลิงก์)
+  - `advanced_mesh.py` — topology ทดสอบ 6 สวิตช์
+  - `metrics_server.py` — ตัววัด throughput/latency/packet loss (port 9999)
+- `vm_originals/SVs2/` — **VM AI brain** (192.168.10.167):
+  - `sdn_network_env.py` — env ต่อ ONOS จริง (ต้นฉบับ)
+  - `train_sdn_ai.py` — สคริปต์เทรน 100k steps + resume
+  - `ppo_gnn_sdn_model.zip` — โมเดลเทรนเสร็จ (341 KB)
+  - `checkpoints/`, `sdn-brain-checkpoints/` — checkpoint 10k–100k steps
+  - `tensorboard/` — logs สำหรับดู convergence curve
 
 ## หมายเหตุทางเทคนิค
 

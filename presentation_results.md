@@ -33,6 +33,26 @@ python benchmark_compare.py --model-vanilla results/ppo_mlp_fast_vanilla \
 
 ---
 
+## 1.5️⃣ โมเดลจริงของคุณ (เทรนบน ONOS จริง 100,000 steps)
+
+Extract ออกจาก VM แล้วอยู่ใน `vm_originals/SVs2/`:
+
+| Artifact | รายละเอียด |
+|---|---|
+| `ppo_gnn_sdn_model.zip` | โมเดล PPO+GNN เทรนเสร็จ (GNN ใน env, obs 32 มิติ, action 200 ลิงก์) |
+| `checkpoints/` | checkpoint ทุก 10k steps (10k → 100k) — ใช้ดู convergence ได้ |
+| `tensorboard/` | logs สำหรับวาดกราฟ reward curve |
+| `sdn_network_env.py` + `train_sdn_ai.py` | โค้ดต้นฉบับของคุณ |
+
+**ประเมินโมเดลจริงกับ ONOS (ต้องเปิด VM + Mininet + metrics server ก่อน):**
+
+```bash
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model vm_originals/SVs2/ppo_gnn_sdn_model --eval-only --eval-episodes 5
+```
+
+> เติมตัวเลขที่ได้ (throughput/latency/loss) ลงในตารางข้อ 1 แทนช่อง PPO+GNN — นี่คือผลการรันจริงของคุณ
+
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 
 | Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |
