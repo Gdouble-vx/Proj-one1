@@ -3,8 +3,9 @@
 > ไฟล์นี้สรุปผลการรัน **Fine-Tuning (PPO+GNN)** และ **Benchmark** ให้อยู่ในรูปแบบตาราง + ข้อความ
 > พร้อมนำไปวางในสไลด์ Canva ได้เลย
 >
-> ⚠️ ค่าที่เป็น **ตัวเลขจริงจาก Fast Simulator** แล้ว: Dijkstra / ECMP
-> ⚠️ ค่าที่เป็น **placeholder `[____]`**: ต้องรัน `benchmark_compare.py` บนเครื่อง ML ของคุณเพื่อเติมตัวเลข PPO จริง
+> ✅ ค่าที่เป็น **ตัวเลขจริงจาก Fast Simulator**: Dijkstra / ECMP
+> ✅ ค่าที่เป็น **ตัวเลขจริงจาก ONOS (REST)**: PPO+GNN 100k steps — ดูข้อ 1.6
+> ⚠️ ค่าที่เป็น **placeholder `[____]`**: ต้องรัน `benchmark_compare.py` บนเครื่อง ML ของคุณเพื่อเติมตัวเลข PPO ที่เหลือ
 
 ---
 
@@ -52,6 +53,29 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 ```
 
 > เติมตัวเลขที่ได้ (throughput/latency/loss) ลงในตารางข้อ 1 แทนช่อง PPO+GNN — นี่คือผลการรันจริงของคุณ
+
+## 1.6️⃣ ผลการประเมินจริง: โมเดล 100k steps บน ONOS 2.7.0 ✅ (eval-only, 5 episodes)
+
+**รันเมื่อ:** 18 ส.ค. 2026 — `--env onos --obs-mode gnn --num-links 200 --base-model ppo_gnn_sdn_model --eval-only --eval-episodes 5`
+(200 steps/episode, deterministic policy, seed 1000–1004, วัด metric จริงผ่าน REST :9999)
+
+| Episode | Reward | Avg Throughput (Mbps) | Avg Latency (ms) | Packet Loss (%) |
+|---|---|---|---|---|
+| ep0 | 7400.01 | 30,856 | 0.07 | 0.0 |
+| ep1 | 7831.25 | 33,504 | 0.07 | 0.0 |
+| ep2 | 9712.93 | 34,038 | 0.05 | 0.0 |
+| ep3 | 7333.12 | 34,794 | 0.04 | 0.0 |
+| ep4 | 6911.85 | 32,446 | 0.08 | 0.0 |
+| **เฉลี่ย (5 episodes)** | **7837.83** | **33,127.6** | **0.06** | **0.0** |
+| เฉลี่ยทุก step (1,000 samples) | — | 31,972 | 0.085 | 0.0 |
+
+**ข้อสังเกตสำคัญ:**
+- พฤติกรรมของโมเดล 100k = **เล่นเซฟ**: ออก action = 1.0 ทั้ง 200 ลิงก์ (น้ำหนักต่ำสุด) → ไม่มีลิงก์ไหนถูกเปลี่ยน
+  (log แสดง "ข้าม 48 ที่ไม่เปลี่ยน" ทุก step) → throughput/latency คงที่รอบ ๆ ค่า default network
+- ตัวเลขนี้คือ **ค่า real data path บน OVS software switch** (topology 14 สวิตช์ / 48 ลิงก์) — ต่าง scale
+  จาก fast simulator (500 Mbps/link) → **ห้ามเทียบข้ามตารางกับข้อ 1 ตรง ๆ** ใช้เป็นหลักฐานว่า
+  "ระบบวัดผลจริงได้ และโมเดลทำงานบน ONOS จริง" มากกว่า
+- Evidence: log ดิบ `results_eval_100k_onos.log` (1,000 samples) + กราฟ `results/real_metrics_eval_onos.png`
 
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 

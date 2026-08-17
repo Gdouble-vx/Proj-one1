@@ -66,6 +66,18 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
     --total-timesteps 3000 --tag resume
 ```
 
+**ผลการประเมินจริงของโมเดล 100k steps (ONOS 2.7.0, 5 episodes × 200 steps):**
+
+| Metric | ค่าเฉลี่ย |
+|---|---|
+| Throughput | **33,127.6 Mbps** (~32 Gbps) |
+| Latency | **0.06 ms** |
+| Packet Loss | **0.0%** |
+| Reward / episode | **7,837.8** |
+
+Evidence: log ดิบ `results_eval_100k_onos.log` (1,000 samples) + กราฟ `results/real_metrics_eval_onos.png`
+(รายละเอียดราย episode อยู่ใน `presentation_results.md` ข้อ 1.6)
+
 **แบบ B — โมเดลใหม่ (policy-side GNN, 50 ลิงก์) ผ่าน transfer learning:**
 ```bash
 python fine_tune_sdn_agent.py --env onos --arch gnn --vm1-ip 192.168.10.165 \
