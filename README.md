@@ -114,6 +114,54 @@ Output: `results/benchmark_results.csv`, `results/benchmark_results.json`, `resu
   - `checkpoints/`, `sdn-brain-checkpoints/` — checkpoint 10k–100k steps
   - `tensorboard/` — logs สำหรับดู convergence curve
 
+## ตั้งค่า ONOS บน SVs1 (Mininet/ONOS VM) — ใช้ 2.7.0 (stable)
+
+> ⚠️ **ทำไมต้อง 2.7.0:** image `onosproject/onos:latest` (3.0.0.SNAPSHOT) มีบั๊ก
+> Atomix/Kryo serialization (`Class is not registered: io.atomix.core.map.AtomicMapEvent`)
+> ทำให้ `HostLocationProvider` crash → host/ARP ทำงานไม่ได้ → ping h1↔h2 ไม่ผ่าน →
+> metrics server คืนค่า default คงที่ (100 Mbps / 50 ms) → reward ไม่มีสัญญาณ → **AI plateau**
+
+```bash
+# 1) เริ่ม docker + ONOS (ครั้งแรก: สลับจาก 3.0 เป็น 2.7.0)
+#    หยุด + เก็บ container เดิม (rollback ได้)
+sudo docker stop onos && sudo docker rename onos onos_latest_backup
+sudo docker pull onosproject/onos:2.7.0
+sudo docker run -d --name onos --network host onosproject/onos:2.7.0
+
+# 2) รอ REST ขึ้น แล้วเปิด app ที่จำเป็น
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/applications/org.onosproject.openflow/active
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/applications/org.onosproject.fwd/active
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/applications/org.onosproject.proxyarp/active
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/applications/org.onosproject.hostprobingprovider/active
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/applications/org.onosproject.reactive-routing/active
+
+# 3) เริ่ม Mininet topology + metrics server (ต้อง root — สคริปต์จบด้วย CLI(net)
+#    ที่อ่าน stdin → ต้องจับ stdin เปิดค้างไว้ ไม่งั้นเครือข่ายจะ teardown ทันที)
+sudo mn -c
+nohup bash -c "(echo '<pass>'; tail -f /dev/null) | sudo -S python3 ~/nn_topo_advanced.py" \
+    > /tmp/mininet.log 2>&1 &
+nohup bash -c "echo '<pass>' | sudo -S python3 ~/metrics_server.py" > /tmp/metrics.log 2>&1 &
+
+# 4) เปิด iperf server บน h2 + ลง HostToHostIntent (ให้ ping h1↔h2 ผ่าน)
+sudo nsenter -t $(ps ax | grep 'mininet:h2' | grep -v grep | awk '{print $1}' | head -1) \
+    -n sh -c 'iperf -s > /dev/null 2>&1 &'
+curl -u onos:rocks -X POST http://127.0.0.1:8181/onos/v1/intents \
+    -H "Content-Type: application/json" \
+    -d '{"type":"HostToHostIntent","appId":"org.onosproject.cli","one":"00:00:00:00:00:01/None","two":"00:00:00:00:00:02/None","priority":100}'
+
+# 5) ตรวจ
+curl -u onos:rocks http://127.0.0.1:8181/onos/v1/devices   # ควรได้ 14 devices available
+curl -u onos:rocks http://127.0.0.1:8181/onos/v1/links     # ควรได้ 96 links (48 คู่)
+curl http://127.0.0.1:9999                                  # ควรได้ throughput/latency จริง
+
+# Rollback (ถ้าต้องการกลับไป 3.0)
+sudo docker stop onos && sudo docker start onos_latest_backup
+```
+
+> **แก้บั๊ก metrics_server.py:** ต้นฉบับยิง `iperf -c 10.0.0.1` (IP ของ h1 เอง — วัดไม่ได้)
+> แก้เป็น `iperf -c 10.0.0.2` (h2 ซึ่งรัน `iperf -s`) — backup เดิมเก็บไว้ที่ `metrics_server.py.bak`
+> ไฟล์นี้ใน `vm_originals/SVs1/` อัปเดตให้ตรงกับเวอร์ชันที่แก้แล้ว
+
 ## หมายเหตุทางเทคนิค
 
 - **Observation (raw):** `node_feat(14) + edge_attr(50×2)` = 114 มิติ

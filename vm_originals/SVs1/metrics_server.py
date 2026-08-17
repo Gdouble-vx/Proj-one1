@@ -39,7 +39,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
             try:
                 # วัด throughput
                 iperf = subprocess.run(
-                    f"nsenter -t {pid} -n iperf -c 10.0.0.1 -t 0.5 -f m",
+                    f"nsenter -t {pid} -n iperf -c 10.0.0.2 -t 0.5 -f m",
                     shell=True, capture_output=True, text=True, timeout=15
                 )
                 if iperf.returncode == 0:
