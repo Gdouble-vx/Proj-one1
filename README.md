@@ -187,6 +187,22 @@ sudo docker stop onos && sudo docker start onos_latest_backup
 > แก้เป็น `iperf -c 10.0.0.2` (h2 ซึ่งรัน `iperf -s`) — backup เดิมเก็บไว้ที่ `metrics_server.py.bak`
 > ไฟล์นี้ใน `vm_originals/SVs1/` อัปเดตให้ตรงกับเวอร์ชันที่แก้แล้ว
 
+## สถานะ VM (18 ส.ค. 2026 — ย้ายจาก E: ไป C:)
+
+> ⚠️ ดิสก์ E: (เดิม) มี bad sector — `fsync` ล้มเหลวทั้งไดรฟ์ (เขียนผ่านแต่ flush ไม่ได้) →
+> VM ค้างทุกครั้งที่ boot จาก E: จึง **ย้าย VM ไป `C:\sdn-vms\`** (ดิสก์สุขภาพดี) แล้ว boot จากที่นั่น
+
+```bash
+# boot VM จากตำแหน่งใหม่ (โฟลเดอร์ละชุด vmdk + vmx)
+"/c/Program Files (x86)/VMware/VMware Workstation/vmrun.exe" start "C:\sdn-vms\SVs1\Ubuntu-SVs1.vmx" nogui
+"/c/Program Files (x86)/VMware/VMware Workstation/vmrun.exe" start "C:\sdn-vms\SVs2\Ubuntu-SVs2.vmx" nogui
+# VM เดิมบน E: ยังอยู่ (`E:\เรียน+\proj`) — อย่า boot จากตรงนั้นจนกว่าดิสก์จะซ่อม
+```
+
+- ISO cdrom ใน `.vmx` ถูกแก้ชี้ไป `C:\sdn-vms\iso\ubuntu-24.04.4-live-server-amd64.iso` แล้ว
+- ถ้า git บนเครื่องนี้ error `fsync error ... Bad file descriptor` (E: ยังพัง) ให้ commit ด้วย:
+  `git -c core.fsync=none -c core.fsyncObjectFiles=false commit ...`
+
 ## หมายเหตุทางเทคนิค
 
 - **Observation (raw):** `node_feat(14) + edge_attr(50×2)` = 114 มิติ

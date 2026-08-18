@@ -153,17 +153,21 @@ def build_env(args, monitor: bool = True):
 
 
 def build_policy_kwargs(env, args: argparse.Namespace) -> dict:
+    # SB3 ห่อ env ด้วย Monitor → ต้อง unwrap ก่อนอ่าน attributes ของ env จริง
+    inner = env
+    while hasattr(inner, "env"):
+        inner = inner.env
     # ถ้า GNN อยู่ใน env แล้ว (obs_mode="gnn" = โมเดลเดิมของคุณ) policy ต้องเป็น MLP
-    use_gnn = args.arch == "gnn" and getattr(env, "obs_mode", "raw") != "gnn"
+    use_gnn = args.arch == "gnn" and getattr(inner, "obs_mode", "raw") != "gnn"
     if args.arch == "gnn" and not use_gnn:
         print("[Warn] env ใช้ obs_mode=gnn (GNN อยู่ใน env แล้ว) → policy เป็น MLP แทน")
     if use_gnn:
         return {
             "features_extractor_class": SDNGraphFeatureExtractor,
             "features_extractor_kwargs": {
-                "num_nodes": env.num_nodes,
-                "max_links": env.max_links,
-                "edge_index": env.edge_index,
+                "num_nodes": inner.num_nodes,
+                "max_links": inner.max_links,
+                "edge_index": inner.edge_index,
                 "features_dim": 32,
                 "hidden_dim": 16,
             },
