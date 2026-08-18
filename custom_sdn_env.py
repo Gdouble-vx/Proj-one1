@@ -56,6 +56,7 @@ class NetworkGNNEncoder(torch.nn.Module):
 # Reward & Metric helpers
 # ----------------------------------------------------------------------------
 def calculate_reward(throughput, latency, packet_loss, alpha=1.2):
+    """Reward เดิม — metric-based only"""
     if latency <= 0:
         latency = 0.001
     network_power = (throughput ** alpha) / latency
@@ -68,6 +69,70 @@ def calculate_reward(throughput, latency, packet_loss, alpha=1.2):
         penalty = -5.0
     reward = network_power + penalty
     return float(reward)
+
+
+# ค่าคงที่สำหรับ reward shaping
+_EXPLORATION_K = 0.5       # กระตุ้นให้ model เปลี่ยน link weights จาก step ก่อนหน้า
+_DIVERSITY_K = 0.3         # กระตุ้นให้ action ไม่ uniform (คิดว่า link ไหนควรเปลี่ยน)
+_IMPROVEMENT_K = 0.5       # รางวัลเมื่อ metric ดีขึ้น
+_NOVELTY_K = 0.05          # รางวัลเมื่อ action ห่างจาก baseline (all=1.0) — ทํางานตั้งแต่ step 1
+_STAGNATION_PENALTY = -0.5 # ลงโทษเมื่อ action ทั้งหมดเท่ากัน (uniform) → บังคับให้คิด
+_consecutive_uniform = 0    # นับจำนวน step ที่ action ทั้งหมดเท่ากัน
+
+
+def compute_exploration_bonus(action, prev_action):
+    """โบนัสเมื่อ model ลองเปลี่ยน link weights จาก step ก่อนหน้า
+    ถ้า action == prev_action → bonus = 0 (ไม่เปลี่ยนอะไร)
+    ถ้าเปลี่ยนเยอะ → bonus สูง (กระตุ้นให้ลองสิ่งใหม่)"""
+    global _consecutive_uniform
+    if prev_action is None:
+        return 0.0
+    delta = np.abs(action - prev_action)
+    bonus = float(np.mean(delta)) * _EXPLORATION_K
+    # ถ้าไม่เปลี่ยนอะไรเลย เพิ่มจำนวน consecutive uniform
+    if float(np.max(delta)) < 0.01:
+        _consecutive_uniform += 1
+    else:
+        _consecutive_uniform = 0
+    return bonus
+
+
+def compute_diversity_bonus(action):
+    """โบนัสเมื่อ action ไม่ uniform — ถ้า model ให้ค่าต่างกัน across links
+    แสดงว่ากำลัง "คิด" ว่า link ไหนควรเปลี่ยน vs ไม่เปลี่ยน
+    + ลงโทษถ้า action uniform (กระตุ้นให้คิดต่าง)"""
+    std_val = float(np.std(action))
+    diversity = std_val * _DIVERSITY_K
+    # ลงโทษถ้า action ทั้งหมดเท่ากัน (ไม่คิดเลย)
+    if std_val < 0.01:
+        diversity += _STAGNATION_PENALTY
+    return diversity
+
+
+def compute_novelty_bonus(action):
+    """โบนัสเมื่อ action ห่างจาก baseline (all=1.0 = OSPF default)
+    ทํางานตั้งแต่ step 1 — แก้ปัญหา chicken-and-egg"""
+    baseline = np.ones_like(action, dtype=np.float32)
+    novelty = float(np.mean(np.abs(action - baseline)))
+    return novelty * _NOVELTY_K
+
+
+def compute_improvement_bonus(current_metrics, prev_metrics):
+    """โบนัสเมื่อ metric ดีขึ้นจาก step ก่อนหน้า"""
+    if prev_metrics is None:
+        return 0.0
+    curr_t = current_metrics.get("throughput", 0)
+    prev_t = prev_metrics.get("throughput", 0)
+    curr_l = current_metrics.get("latency", 100)
+    prev_l = prev_metrics.get("latency", 100)
+    bonus = 0.0
+    # throughput ดีขึ้น
+    if prev_t > 0 and curr_t > prev_t:
+        bonus += _IMPROVEMENT_K * ((curr_t - prev_t) / prev_t)
+    # latency ลดลง
+    if prev_l > 0 and curr_l < prev_l:
+        bonus += _IMPROVEMENT_K * ((prev_l - curr_l) / prev_l)
+    return float(bonus)
 
 
 def measure_real_metrics(vm1_ip="192.168.10.165"):
@@ -106,7 +171,9 @@ class CustomSDNEnv(gym.Env):
         self.step_delay = step_delay
         self.seed = seed
         self.step_count = 0
-        self.prev_weights = {}              # 🔥 cache ค่าน้ำหนักเก่า → POST เฉพาะลิงก์ที่เปลี่ยน > 2.0
+        self.prev_weights = {}              # cache ค่าน้ำหนักเก่า → POST เฉพาะลิงก์ที่เปลี่ยน
+        self.prev_action = None             # action จาก step ก่อนหน้า (สำหรับ exploration bonus)
+        self.prev_metrics = None            # metrics จาก step ก่อนหน้า (สำหรับ improvement bonus)
 
         # observation: node_feat(num_nodes) + edge_attr(max_links*2) เมื่อ raw
         if obs_mode == "raw":
@@ -226,7 +293,7 @@ class CustomSDNEnv(gym.Env):
     # ------------------------------------------------------------------ apply
     def _apply_weights_to_onos(self, action):
         """POST ค่าน้ำหนักลิงก์ใหม่ไปที่ ONOS network configuration
-        🔥 ส่งเฉพาะลิงก์ที่ weight เปลี่ยน > 2.0 หรือครั้งแรก (ลด REST calls ลงมาก)"""
+        ส่งเฉพาะลิงก์ที่ weight เปลี่ยน > 0.5 หรือครั้งแรก (ลด REST calls)"""
         try:
             _, links = self._get_topology()
             device_ids = list(self.device_map.keys())
@@ -234,7 +301,7 @@ class CustomSDNEnv(gym.Env):
             for idx, (si, di, src_port, dst_port) in enumerate(links[: self.max_links]):
                 weight_value = float(action[idx])
                 prev = self.prev_weights.get(idx)
-                if prev is None or abs(weight_value - prev) > 2.0:
+                if prev is None or abs(weight_value - prev) > 0.5:
                     src_device = device_ids[si]
                     dst_device = device_ids[di]
                     config_url = (f"http://{self.vm1_ip}:8181/onos/v1/network/configuration/"
@@ -253,6 +320,10 @@ class CustomSDNEnv(gym.Env):
         super().reset(seed=seed)
         self.step_count = 0
         self.prev_weights = {}
+        self.prev_action = None
+        self.prev_metrics = None
+        global _consecutive_uniform
+        _consecutive_uniform = 0
         observation = self._get_network_state_from_onos()
         return observation, {}
 
@@ -274,10 +345,30 @@ class CustomSDNEnv(gym.Env):
             latency = float(np.clip(5.0 + mean_weight * 0.3, 1, 200))
             packet_loss = float(np.clip(mean_weight / 5000, 0, 0.1))
 
-        self.last_metrics = {"throughput": throughput, "latency": latency,
-                             "packet_loss": packet_loss}
+        new_metrics = {"throughput": throughput, "latency": latency,
+                       "packet_loss": packet_loss}
 
-        reward = calculate_reward(throughput, latency, packet_loss) / 1e5
+        # === Composite Reward (5 components) ===
+        # 1) Metric reward (เดิม)
+        metric_reward = calculate_reward(throughput, latency, packet_loss) / 1e5
+        # 2) Exploration bonus: กระตุ้นให้ model ลองเปลี่ยน link weights จาก step ก่อนหน้า
+        exploration_bonus = compute_exploration_bonus(action, self.prev_action)
+        # 3) Diversity bonus: กระตุ้นให้ action ไม่ uniform + ลงโทษ uniform
+        diversity_bonus = compute_diversity_bonus(action)
+        # 4) Novelty bonus: รางวัลเมื่อ action ห่างจาก OSPF baseline (all=1.0)
+        novelty_bonus = compute_novelty_bonus(action)
+        # 5) Improvement bonus: รางวัลเมื่อ metric ดีขึ้นจาก step ก่อนหน้า
+        improvement_bonus = compute_improvement_bonus(new_metrics, self.prev_metrics)
+
+        reward = metric_reward + exploration_bonus + diversity_bonus + novelty_bonus + improvement_bonus
+
+        print(f"[Reward-Step {self.step_count + 1}] metric={metric_reward:.6f} "
+              f"explore={exploration_bonus:.6f} diversity={diversity_bonus:.6f} "
+              f"novelty={novelty_bonus:.6f} improve={improvement_bonus:.6f} total={reward:.6f}")
+
+        self.prev_action = action.copy()
+        self.prev_metrics = new_metrics.copy()
+        self.last_metrics = new_metrics
 
         next_observation = self._get_network_state_from_onos()
 

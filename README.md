@@ -125,6 +125,18 @@ Eval หลัง fine-tune (5 episodes × 200 steps, deterministic, seed 1000�
 > สรุป: plateau ไม่ได้เกิดจาก metric ไม่มีสัญญาณอีกต่อไป แต่อยู่ที่ reward shaping — penalty การเปลี่ยน
 > เส้นทางสูงเกินไปจน policy เลือกเล่นเซฟเป็น local optimum (รายละเอียดอยู่ใน `presentation_results.md` ข้อ 1.8)
 
+**แบบ C — Reward Sholving v2 (แก้ safe-action plateau) — กำลังเทรน:**
+```bash
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model ppo_gnn_sdn_model --lr 1e-4 --ent-coef 0.08 \
+    --total-timesteps 3000 --tag reward_v2
+# → โมเดล: results/ppo_gnn_onos_reward_v2.zip (รอเทรนเสร็จ)
+```
+
+**สิ่งที่แก้:** เพิ่ม composite reward (exploration + diversity + novelty + improvement bonuses),
+ลด delta threshold 2.0→0.5, เพิ่ม ent_coef 0.01→0.08 — โมเดลเปลี่ยน link weights 3-10/step
+(แทนที่ 0/step เดิม) · รายละเอียดอยู่ใน `presentation_results.md` ข้อ 1.9
+
 **แบบ B — โมเดลใหม่ (policy-side GNN, 50 ลิงก์) ผ่าน transfer learning:**
 ```bash
 python fine_tune_sdn_agent.py --env onos --arch gnn --vm1-ip 192.168.10.165 \

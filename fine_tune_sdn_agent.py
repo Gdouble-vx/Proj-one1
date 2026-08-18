@@ -203,7 +203,7 @@ def build_model(env, args: argparse.Namespace) -> PPO:
         model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs,
                     learning_rate=args.lr, n_steps=args.n_steps,
                     batch_size=args.batch_size, gamma=0.99, gae_lambda=0.95,
-                    clip_range=0.2, ent_coef=0.01, seed=args.seed,
+                    clip_range=0.2, ent_coef=args.ent_coef, seed=args.seed,
                     verbose=0, device="auto")
 
     if args.freeze and args.arch == "gnn":
@@ -266,6 +266,8 @@ def main():
     parser.add_argument("--num-links", type=int, default=50)
     parser.add_argument("--eval-episodes", type=int, default=5)
     parser.add_argument("--log-interval", type=int, default=200)
+    parser.add_argument("--ent-coef", type=float, default=0.08,
+                        help="PPO entropy coefficient — ยิ่งสูงยิ่ง探索 (explore) มาก")
     parser.add_argument("--save-dir", default="results")
     args = parser.parse_args()
 

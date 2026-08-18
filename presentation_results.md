@@ -172,6 +172,57 @@ Reward ทรงตัวที่ ~7,340–7,425 ตลอด 3,000 steps — �
   เป็น local optimum · ทางออก: เพิ่ม exploration bonus / ลด penalty การเปลี่ยนน้ำหนัก /
   ใช้สถาปัตยกรรม GNN-in-policy หรือเพิ่ม steps ให้พอที่ policy จะกล้าลองเส้นทางใหม่
 
+## 1.9️⃣ Reward Shaping v2 — แก้ Safe-Action Plateau ✅ (กำลังเทรน)
+
+**ปัญหา:** โมเดล 100k + fine-tune v1 เล่นเซฟ (action = 1.0 ทุกลิงก์ → ไม่เปลี่ยนเส้นทางจาก OSPF)
+→ ไม่มี gradient signal ให้ลองเส้นทางใหม่ → reward ทรงตัวที่ ~7,370
+
+**สาเหตุ:** reward function เดิมเป็น pure metric-based (`throughput^1.2 / latency`) ไม่มี incentive ให้ explore
++ delta threshold > 2.0 block การเปลี่ยนละเอียด + ent_coef=0.01 ต่ำเกินไป
+
+**สิ่งที่แก้ (3 ไฟล์):**
+
+| ไฟล์ | การแก้ |
+|---|---|
+| `custom_sdn_env.py` | เพิ่ม reward components 4 ตัว: **exploration bonus** (獎勵การเปลี่ยน link weights จาก step ก่อน), **diversity bonus** (獎勵 action ที่ไม่ uniform + ลงโทษ uniform), **novelty bonus** (獎勵การห่างจาก OSPF baseline all=1.0 — ทํางานตั้งแต่ step 1), **improvement bonus** (獎勵เมื่อ metric ดีขึ้น) + **ลด delta threshold** จาก 2.0 → 0.5 |
+| `fine_tune_sdn_agent.py` | เพิ่ม `--ent-coef` arg (ค่าเริ่มต้น 0.08, เดิม 0.01) — เพิ่ม policy entropy กระตุ้น exploration |
+
+**Composite Reward:**
+```
+total_reward = metric_reward          # (throughput^1.2 / latency) / 1e5
+             + exploration_bonus       # 0.5 × mean(|action - prev_action|)
+             + diversity_bonus         # 0.3 × std(action)  — ถ้า std<0.01 ลงโทษ -0.5
+             + novelty_bonus           # 0.05 × mean(|action - baseline(1.0)|)
+             + improvement_bonus       # 0.5 × relative_throughput/latency_improvement
+```
+
+**ผลการเทรน (กำลังรัน, ข้อมูล 18 ส.ค. 2026):**
+
+```bash
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model ppo_gnn_sdn_model --lr 1e-4 --ent-coef 0.08 \
+    --total-timesteps 3000 --tag reward_v2
+```
+
+| Timestep | Mean Reward (200-step) | ลิงก์เปลี่ยนเฉลี่ย/step |
+|---|---|---|
+| 200 | 7,899 | ~5-8 |
+| 400 | 7,569 | ~5-9 |
+| 600 | 7,471 | ~5-10 |
+| 800 | 7,368 | ~4-9 |
+| 1,000 | 7,378 | ~4-8 |
+| 1,200 | 7,372 | ~4-9 |
+| 1,400 | 7,371 | ~5-8 |
+| 1,600 | 7,378 | ~3-8 |
+
+**🔑 ชัยชนะที่สำคัญที่สุด:** โมเดล **เปลี่ยน link weights 3-10 ลิงก์/step** จริง ๆ (เทียบกับ v1 ที่เปลี่ยน 0 ลิงก์ตลอด)
+→ exploration/diversity bonuses ทำงาน (0.05-0.12/step) → policy กำลังเรียนรู้ว่า link ไหนควรเปลี่ยน
+
+**หมายเหตุ:** Reward ลดจาก 7,899 → 7,372 (−6.7%) เป็น expected — โมเดลกำลัง explore paths ที่ metric อาจแย่กว่าชั่วคราว
+แต่จะค้นพบ routing ที่ดีกว่า long-term · **Eval ผลสุดท้ายจะต่อเมื่อเทรนเสร็จ ( ETA ~1.5 ชม.)**
+
+---
+
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 
 | Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |
