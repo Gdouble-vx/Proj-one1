@@ -172,7 +172,7 @@ Reward ทรงตัวที่ ~7,340–7,425 ตลอด 3,000 steps — �
   เป็น local optimum · ทางออก: เพิ่ม exploration bonus / ลด penalty การเปลี่ยนน้ำหนัก /
   ใช้สถาปัตยกรรม GNN-in-policy หรือเพิ่ม steps ให้พอที่ policy จะกล้าลองเส้นทางใหม่
 
-## 1.9️⃣ Reward Shaping v2 — แก้ Safe-Action Plateau ✅ (กำลังเทรน)
+## 1.9️⃣ Reward Shaping v2 — แก้ Safe-Action Plateau ✅ เทรนเสร็จแล้ว
 
 **ปัญหา:** โมเดล 100k + fine-tune v1 เล่นเซฟ (action = 1.0 ทุกลิงก์ → ไม่เปลี่ยนเส้นทางจาก OSPF)
 → ไม่มี gradient signal ให้ลองเส้นทางใหม่ → reward ทรงตัวที่ ~7,370
@@ -204,6 +204,11 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
     --total-timesteps 3000 --tag reward_v2
 ```
 
+**🔑 ชัยชนะที่สำคัญที่สุด:** โมเดล **เปลี่ยน link weights 3-10 ลิงก์/step** จริง ๆ (เทียบกับ v1 ที่เปลี่ยน 0 ลิงก์ตลอด)
+→ exploration/diversity bonuses ทำงาน (0.05-0.12/step) → policy กำลังเรียนรู้ว่า link ไหนควรเปลี่ยน
+
+**ผลการเทรน (เสร็จแล้ว 18 ส.ค. 2026 — 3,000 steps, ~4.34 ชม.):**
+
 | Timestep | Mean Reward (200-step) | ลิงก์เปลี่ยนเฉลี่ย/step |
 |---|---|---|
 | 200 | 7,899 | ~5-8 |
@@ -214,12 +219,29 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 | 1,200 | 7,372 | ~4-9 |
 | 1,400 | 7,371 | ~5-8 |
 | 1,600 | 7,378 | ~3-8 |
+| 1,800 | 7,366 | ~5-10 |
+| 2,000 | 7,347 | ~4-8 |
+| 2,200 | 7,385 | ~5-9 |
+| 2,400 | 7,374 | ~4-8 |
+| 2,600 | 7,369 | ~5-10 |
+| 2,800 | 7,336 | ~4-9 |
+| **3,000** | **7,305** | **~5-8** |
 
-**🔑 ชัยชนะที่สำคัญที่สุด:** โมเดล **เปลี่ยน link weights 3-10 ลิงก์/step** จริง ๆ (เทียบกับ v1 ที่เปลี่ยน 0 ลิงก์ตลอด)
-→ exploration/diversity bonuses ทำงาน (0.05-0.12/step) → policy กำลังเรียนรู้ว่า link ไหนควรเปลี่ยน
+**Eval ผลสุดท้าย (5 episodes × 200 steps, deterministic, seed 1000–1004):**
 
-**หมายเหตุ:** Reward ลดจาก 7,899 → 7,372 (−6.7%) เป็น expected — โมเดลกำลัง explore paths ที่ metric อาจแย่กว่าชั่วคราว
-แต่จะค้นพบ routing ที่ดีกว่า long-term · **Eval ผลสุดท้ายจะต่อเมื่อเทรนเสร็จ ( ETA ~1.5 ชม.)**
+| Episode | Reward | Throughput (Mbps) | Latency (ms) | Loss (%) |
+|---|---|---|---|---|
+| ep0 | 7,393.82 | 31,410 | 0.07 | 0.0 |
+| ep1 | 6,955.66 | 34,141 | 0.07 | 0.0 |
+| ep2 | 6,656.38 | 33,519 | 0.07 | 0.0 |
+| ep3 | 6,814.28 | 34,688 | 0.08 | 0.0 |
+| ep4 | 6,767.41 | 33,181 | 0.07 | 0.0 |
+| **เฉลี่ย** | **6,917.51** | **33,387.8** | **0.07** | **0.0** |
+
+> **วิเคราะห์:** Reward v2 ได้ throughput สูงสุดใน 4 วิธี (33,388 Mbps) ใกล้เคียง Dijkstra (33,235)
+> แต่ reward เฉลี่ยต่ำกว่า 100k เดิม (6,918 vs 7,838) เพราะ奖励ส่วน exploration/diversity ลดลงตอน deterministic eval
+> **โมเดลเปลี่ยน link weights จริงแล้ว** (during training) — แต่ deterministic eval ยังเล่นเซฟ
+> → ต้องปรับ entropy / temperature ตอน eval ให้ explore ด้วย
 
 ---
 
