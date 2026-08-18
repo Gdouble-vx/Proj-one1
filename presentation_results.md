@@ -77,6 +77,39 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
   "ระบบวัดผลจริงได้ และโมเดลทำงานบน ONOS จริง" มากกว่า
 - Evidence: log ดิบ `results_eval_100k_onos.log` (1,000 samples) + กราฟ `results/real_metrics_eval_onos.png`
 
+## 1.7️⃣ เปรียบเทียบ Dijkstra/OSPF vs PPO+GNN 100k (ONOS จริง) ✅
+
+**การทดลอง:** รันทั้งสองวิธีบน topology เดียวกัน (14 สวิตช์ / 48 ลิงก์, ONOS 2.7.0, Mininet OVS) ด้วยโปรโตคอลเดียวกับข้อ 1.6
+(5 episodes × 200 steps, seeds 1000–1004, deterministic)
+
+- **Dijkstra/OSPF baseline** = ไม่แตะน้ำหนักลิงก์ (annotations ว่าง = cost default = OSPF/equal-cost) — โปรโตคอลเดียวกับที่ PPO eval เริ่มต้น
+- **PPO+GNN 100k** = โมเดล `ppo_gnn_sdn_model` — ดูข้อ 1.6
+
+| Episode | Dijkstra — Throughput (Mbps) | Dijkstra — Latency (ms) | Dijkstra — Reward | PPO — Reward |
+|---|---|---|---|---|
+| ep0 | 34,968 | 0.14 | 6,915 | 7,400.01 |
+| ep1 | 33,956 | 0.08 | 6,811 | 7,831.25 |
+| ep2 | 30,758 | 0.08 | 6,823 | 9,712.93 |
+| ep3 | 34,889 | 0.10 | 6,539 | 7,333.12 |
+| ep4 | 31,606 | 0.10 | 6,814 | 6,911.85 |
+| **เฉลี่ย** | **33,235.4** | **0.099** | **6,780.5** | **7,837.8** |
+
+| Metric | Dijkstra/OSPF | PPO+GNN 100k | Δ |
+|---|---|---|---|
+| Avg Throughput (Mbps) | 33,235.4 | 33,127.6 | −0.3% |
+| Avg Latency (ms) | 0.099 | 0.060 | **−39%** |
+| Packet Loss (%) | 0.0 | 0.0 | 0 |
+| Avg Reward | 6,780.5 | 7,837.8 | **+15.6%** |
+
+**การตีความ (ซื่อตรง — ควรนำเสนอตามนี้):**
+- ทั้งคู่วัดบน OSPF state เดียวกัน; โมเดล 100k **เล่นเซฟ** (action = 1.0 ทุกลิงก์) → ไม่ได้เปลี่ยนเส้นทางจาก baseline จริง
+  → throughput/loss แทบเท่ากัน (ต่างกันใน noise ของการวัด)
+- latency ต่ำกว่าเล็กน้อย (0.06 vs 0.10 ms) → reward สูงกว่า ~16% แต่ยังอยู่ในช่วงความแปรปรวน
+- **ข้อสรุปที่นำเสนอได้:** โมเดล 100k ยังไม่เหนือกว่า baseline อย่างมีนัยสำคัญ — คาดว่าจะได้ผลต่างจริง
+  หลัง fine-tune ต่อบน ONOS 2.7.0 (metric จริงมีสัญญาณแล้ว) — นี่คือ motivation ของขั้น fine-tune 3,000 steps
+
+Evidence: `results_dijkstra_onos.json` (บน VM ก่อน disk fail — ตัวเลขยืนยันในตารางนี้)
+
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 
 | Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |

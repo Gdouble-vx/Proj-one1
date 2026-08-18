@@ -75,6 +75,19 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 | Packet Loss | **0.0%** |
 | Reward / episode | **7,837.8** |
 
+**เทียบกับ Dijkstra/OSPF baseline (รันบน ONOS จริง topology เดียวกัน, 5×200 steps):**
+
+| Metric | Dijkstra/OSPF | PPO+GNN 100k | Δ |
+|---|---|---|---|
+| Throughput (Mbps) | 33,235.4 | 33,127.6 | −0.3% |
+| Latency (ms) | 0.099 | 0.060 | **−39%** |
+| Packet Loss (%) | 0.0 | 0.0 | 0 |
+| Reward / episode | 6,780.5 | 7,837.8 | **+15.6%** |
+
+> โมเดล 100k เล่นเซฟ (action = 1.0 ทุกลิงก์ → ไม่เปลี่ยนเส้นทางจาก OSPF) → throughput/loss เท่ากันใน noise,
+> latency ต่ำกว่าเล็กน้อย → reward สูงกว่า ~16% — ยังไม่เหนือกว่า baseline อย่างมีนัยสำคัญจนกว่าจะ fine-tune ต่อ
+> (รายละเอียดราย episode อยู่ใน `presentation_results.md` ข้อ 1.7)
+
 Evidence: log ดิบ `results_eval_100k_onos.log` (1,000 samples) + กราฟ `results/real_metrics_eval_onos.png`
 (รายละเอียดราย episode อยู่ใน `presentation_results.md` ข้อ 1.6)
 
