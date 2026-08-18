@@ -110,6 +110,68 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 
 Evidence: `results_dijkstra_onos.json` (บน VM ก่อน disk fail — ตัวเลขยืนยันในตารางนี้)
 
+## 1.8️⃣ ผลการ Fine-Tune 3,000 steps บน ONOS จริง + เปรียบเทียบครบ 3 วิธี ✅
+
+**การทดลอง:** resume โมเดล 100k ด้วย `--lr 1e-4 --total-timesteps 3000` บน ONOS 2.7.0 จริง
+(metric จริงทุก step ผ่าน REST :9999) — ตามกลยุทธ์ transfer learning
+
+**ข้อมูลการเทรน (รันเมื่อ 18 ส.ค. 2026, 01:47–06:14 UTC):**
+
+```bash
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model ppo_gnn_sdn_model --lr 1e-4 --total-timesteps 3000 --tag resume
+```
+
+- เวลาจริง: **15,630 วินาที (4.34 ชม.)** — ~0.19 step/s (5.2s/step เพราะวัด metric จริงทุก step)
+  → เร็วกว่าเทรนจากศูนย์ 100k steps (29.2 ชม.) **~7 เท่า** ต่อจำนวน steps ที่เทรน
+  (หมายเหตุ: ประมาณการ "15–30 นาที" ใน handoff คิดจาก simulator — บน ONOS จริงที่ ~1 step/s
+  ตัวเลขที่ถูกต้องคือ ~50 นาที/1,000 steps)
+- โมเดล: `results/ppo_gnn_onos_resume.zip` (346 KB) · training log: `results/train_gnn_onos_resume.csv`
+
+| Timestep | Mean Reward (200-step rolling) |
+|---|---|
+| 200 | 7,210.2 |
+| 600 | 7,415.8 |
+| 1,000 | 7,416.4 |
+| 1,400 | 7,398.1 |
+| 1,800 | 7,369.5 |
+| 2,200 | 7,342.2 |
+| 2,600 | 7,342.4 |
+| 3,000 | 7,336.0 |
+
+Reward ทรงตัวที่ ~7,340–7,425 ตลอด 3,000 steps — ไม่แย่ลง แต่ก็ไม่ดีขึ้น (plateau ยังอยู่)
+
+**Eval โมเดลหลัง fine-tune (5 episodes × 200 steps, deterministic policy, seed 1000–1004):**
+
+| Episode | Reward | Avg Throughput (Mbps) | Avg Latency (ms) | Packet Loss (%) |
+|---|---|---|---|---|
+| ep0 | 7,200.25 | 29,534 | 0.08 | 0.0 |
+| ep1 | 7,475.53 | 31,229 | 0.06 | 0.0 |
+| ep2 | 7,164.25 | 31,983 | 0.07 | 0.0 |
+| ep3 | 7,265.79 | 32,266 | 0.07 | 0.0 |
+| ep4 | 7,285.54 | 30,723 | 0.06 | 0.0 |
+| **เฉลี่ย** | **7,278.27** | **31,147** | **0.07** | **0.0** |
+
+**เปรียบเทียบครบ 3 วิธี (ONOS จริง, โปรโตคอลเดียวกัน 5×200 steps):**
+
+| Metric | Dijkstra/OSPF | PPO+GNN 100k | PPO+GNN fine-tune 3k |
+|---|---|---|---|
+| Avg Throughput (Mbps) | 33,235.4 | 33,127.6 | 31,147.0 |
+| Avg Latency (ms) | 0.099 | 0.060 | 0.068 |
+| Packet Loss (%) | 0.0 | 0.0 | 0.0 |
+| Avg Reward | 6,780.5 | 7,837.8 | 7,278.3 |
+
+**การตีความ (ซื่อตรง — ควรนำเสนอตามนี้):**
+- Pipeline transfer learning ทำงานครบ: load 100k → resume 3,000 steps → save → eval ไม่ error
+- โมเดลหลัง fine-tune **ยังเล่นเซฟเหมือนเดิม** (action = 1.0 ทุกลิงก์ → "ข้าม 48 ที่ไม่เปลี่ยน"
+  ทุก step ตลอด 3,000 steps) → ไม่ได้เปลี่ยนเส้นทางจาก OSPF เลย
+- reward 7,278 ต่ำกว่า eval ของ 100k (7,838) เล็กน้อย แต่ต่างกันในระดับ run-to-run variance
+  (baseline Dijkstra ที่รันคนละเวลาได้ 6,780 — ต่ำกว่า 100k ถึง 13% ทั้งที่พฤติกรรมเหมือนกัน)
+- **บทเรียน:** plateau ไม่ได้เกิดจาก "metric ไม่มีสัญญาณ" อีกต่อไป (ตอนนี้มีสัญญาณจริงแล้ว)
+  แต่อยู่ที่ **reward shaping** — penalty ของการเปลี่ยนเส้นทางสูงเกินไปจน policy เลือกเล่นเซฟ
+  เป็น local optimum · ทางออก: เพิ่ม exploration bonus / ลด penalty การเปลี่ยนน้ำหนัก /
+  ใช้สถาปัตยกรรม GNN-in-policy หรือเพิ่ม steps ให้พอที่ policy จะกล้าลองเส้นทางใหม่
+
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 
 | Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |

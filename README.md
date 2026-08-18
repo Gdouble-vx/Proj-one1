@@ -91,6 +91,40 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 Evidence: log ดิบ `results_eval_100k_onos.log` (1,000 samples) + กราฟ `results/real_metrics_eval_onos.png`
 (รายละเอียดราย episode อยู่ใน `presentation_results.md` ข้อ 1.6)
 
+**ผลการ Fine-Tune 3,000 steps (resume จาก 100k, ONOS จริง) — รันเสร็จแล้ว:**
+
+```bash
+python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
+    --base-model ppo_gnn_sdn_model --lr 1e-4 --total-timesteps 3000 --tag resume
+# → เวลาจริง 15,630s (4.34 ชม.) · โมเดล: results/ppo_gnn_onos_resume.zip
+# → training log: results/train_gnn_onos_resume.csv (reward ทรงตัว ~7,340–7,425)
+```
+
+Eval หลัง fine-tune (5 episodes × 200 steps, deterministic, seed 1000–1004):
+
+| Episode | Reward | Throughput (Mbps) | Latency (ms) | Loss (%) |
+|---|---|---|---|---|
+| ep0 | 7,200.25 | 29,534 | 0.08 | 0.0 |
+| ep1 | 7,475.53 | 31,229 | 0.06 | 0.0 |
+| ep2 | 7,164.25 | 31,983 | 0.07 | 0.0 |
+| ep3 | 7,265.79 | 32,266 | 0.07 | 0.0 |
+| ep4 | 7,285.54 | 30,723 | 0.06 | 0.0 |
+| **เฉลี่ย** | **7,278.3** | **31,147** | **0.07** | **0.0** |
+
+**สรุป 3 วิธี (ONOS จริง, โปรโตคอลเดียวกัน):**
+
+| Metric | Dijkstra/OSPF | PPO+GNN 100k | PPO+GNN fine-tune 3k |
+|---|---|---|---|
+| Throughput (Mbps) | 33,235.4 | 33,127.6 | 31,147.0 |
+| Latency (ms) | 0.099 | 0.060 | 0.068 |
+| Packet Loss (%) | 0.0 | 0.0 | 0.0 |
+| Reward / episode | 6,780.5 | 7,837.8 | 7,278.3 |
+
+> โมเดลหลัง fine-tune ยัง**เล่นเซฟ** (action = 1.0 ทุกลิงก์ → ไม่เปลี่ยนเส้นทางจาก OSPF) เช่นเดียวกับ 100k
+> → reward ต่างกันในระดับ run-to-run variance ของการวัด (Dijkstra ที่รันคนละเวลาก็ได้ 6,780)
+> สรุป: plateau ไม่ได้เกิดจาก metric ไม่มีสัญญาณอีกต่อไป แต่อยู่ที่ reward shaping — penalty การเปลี่ยน
+> เส้นทางสูงเกินไปจน policy เลือกเล่นเซฟเป็น local optimum (รายละเอียดอยู่ใน `presentation_results.md` ข้อ 1.8)
+
 **แบบ B — โมเดลใหม่ (policy-side GNN, 50 ลิงก์) ผ่าน transfer learning:**
 ```bash
 python fine_tune_sdn_agent.py --env onos --arch gnn --vm1-ip 192.168.10.165 \
