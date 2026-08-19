@@ -261,6 +261,28 @@ sudo docker stop onos && sudo docker start onos_latest_backup
 - ถ้า git บนเครื่องนี้ error `fsync error ... Bad file descriptor` (E: ยังพัง) ให้ commit ด้วย:
   `git -c core.fsync=none -c core.fsyncObjectFiles=false commit ...`
 
+## เปรียบเทียบกับงานวิจัยที่เกี่ยวข้อง (Literature Comparison)
+
+> รายละเอียดครบใน `presentation_results.md` ข้อ 1.10 — สรุปสั้น:
+
+เปรียบเทียบกับงานวิจัย 7 ชิ้น ([Rusek 2020](https://arxiv.org/abs/1910.01508), [Almasan 2021](https://upcommons.upc.edu/bitstream/handle/2117/355595/Almasan%20et%20al.pdf), [Wu 2025](https://www.sciencedirect.com/science/article/abs/pii/S1084804525001468), [He 2024](https://pmc.ncbi.nlm.nih.gov/articles/PMC11089111/), [IET 2025](https://ietresearch.onlinelibrary.wiley.com/doi/10.1049/ntw2.70016), [Jiang 2024](https://www.mdpi.com/2071-1050/16/21/9239)):
+
+| คุณสมบัติ | งานอื่น (ค่าเฉลี่ย) | **งานของเรา** |
+|---|---|---|
+| RL Algorithm | DRL/PPO | **PPO** |
+| GNN | GCN/CensNet | **GATConv 2-layer** |
+| Environment | Simulator (ส่วนใหญ่) | **Mininet+ONOS จริง** ✅ |
+| Transfer Learning | ไม่มี | **✅ Pretrain → Fine-tune** |
+| Reward Shaping | metric-based | **metric + exploration + diversity + novelty** |
+| Throughput improvement | +15–30% (simulator) | **+0.46%** (ONOS จริง, topology ไม่ bottleneck) |
+| Latency improvement | −9–20% (simulator) | **−29.3%** (ONOS จริง) |
+
+**จุดแข็ง:** Transfer Learning (ลดเวลา 7 เท่า), Reward Shaping แก้ safe-action, วัดผลบน ONOS จริง
+**Gap:** throughput improvement ต่ำเพราะ topology ไม่ bottleneck — ต้องปรับ traffic scenario
+
+ดูรายละเอียดทั้งหมดใน `presentation_results.md` ข้อ 1.10
+
+
 ## หมายเหตุทางเทคนิค
 
 - **Observation (raw):** `node_feat(14) + edge_attr(50×2)` = 114 มิติ

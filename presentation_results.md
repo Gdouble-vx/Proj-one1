@@ -245,6 +245,72 @@ python fine_tune_sdn_agent.py --env onos --obs-mode gnn --num-links 200 \
 
 ---
 
+---
+
+## 1.10️⃣ เปรียบเทียบกับงานวิจัยที่เกี่ยวข้อง (Literature Comparison)
+
+### งานวิจัยที่อ้างอิง (Key References)
+
+| # | ชื่อบทความ | ผู้แต่ง | ปี | วารสาร/Conference | Citations |
+|---|---|---|---|---|---|
+| [1] | RouteNet: Leveraging Graph Neural Networks for Network Modeling and Optimization in SDN | Rusek et al. | 2020 | IEEE JSAC | 522 |
+| [2] | Towards Real-Time Routing Optimization with Deep Reinforcement Learning: Open Challenges | Almasan et al. | 2021 | IEEE HPSR | 22 |
+| [3] | Deep Reinforcement Learning Meets Graph Neural Networks: Exploring a Routing Optimization Use Case | Almasan et al. | 2022 | arXiv | — |
+| [4] | Intelligent Routing Optimization for SDN Based on PPO and GNN | Wu & Zhu | 2025 | J. Network & Computer Applications | 24 |
+| [5] | Reinforcement Learning-Based SDN Routing Scheme Empowered by Causality Detection and GNN | He et al. | 2024 | Frontiers in Computational Neuroscience | 35 |
+| [6] | An Implementation of Deep Reinforcement Learning-Based Routing Optimization in SDN | (IET) | 2025 | IET Networks | — |
+| [7] | Graph Neural Networks for Routing Optimization: Challenges and Opportunities | Jiang et al. | 2024 | Sustainability (MDPI) | 98 |
+
+### เปรียบเทียบวิธี (Method Comparison)
+
+| คุณสมบัติ | RouteNet [1] | DRL+GNN [2][3] | PPO-R [4] | Causal+GNN [5] | IET DRL [6] | **งานของเรา** |
+|---|---|---|---|---|---|---|
+| **RL Algorithm** | — (supervised) | DRL (A3C/PPO) | PPO | DRL | DRL | **PPO** |
+| **GNN Type** | GCN | GCN/GAT | GNN | CensNet (GNN) | — | **GATConv (2-layer)** |
+| **GNN Location** | ใน env (model) | ใน policy | ใน policy | ใน policy | ไม่มี GNN | **ทั้ง 2 แบบ** (env + policy) |
+| **Environment** | Simulator | Simulator | Simulator | Simulator | Mininet+ONOS ✅ | **Mininet+ONOS** ✅ |
+| **Transfer Learning** | ไม่มี | ไม่มี | ไม่มี | ไม่มี | ไม่มี | **✅ Pretrain → Fine-tune** |
+| **Reward Shaping** | N/A | metric-based | metric-based | metric + causality | metric-based | **metric + exploration + diversity + novelty** |
+| **Topology** | 多種 (synthetic) | 多種 (Brite) | 20 nodes | 14 nodes | 3 sizes | **14 nodes, 96 links** |
+| **REST API จริง** | ไม่มี | ไม่มี | ไม่มี | ไม่มี | ✅ | **✅ ONOS REST API** |
+| **Zero-Shot Gen.** | ✅ | ✅ | ไม่ได้ทดสอบ | ไม่ได้ทดสอบ | ไม่ได้ทดสอบ | **มีใน pipeline** |
+
+### เปรียบเทียบผลลัพธ์ (Results Comparison)
+
+> ⚠️ หมายเหตุ: ตัวเลขจากงานอื่นอยู่ใน **simulator** (ไม่ใช่ ONOS จริง) — เปรียบเทียบแบบ directional เท่านั้น
+
+| งาน | Baseline | Throughput Improvement | Latency Reduction | Packet Loss Improvement |
+|---|---|---|---|---|
+| DRL-based routing [6] | OSPF | **+26.81%** | **−9.16%** | — |
+| PPO-based routing [5] | Shortest Path | — | **≈ −20%** | **≈ −25%** |
+| DRL+GNN [2][3] | OSPF & SAP | **+15–30%** (topology-dependent) | improved | improved |
+| RouteNet [1] | OSPF | improved (prediction accuracy) | improved (delay prediction) | improved |
+| **งานของเรา (ONOS จริง)** | **Dijkstra/OSPF** | **+0.46%** (33,388 vs 33,235) | **−29.3%** (0.07 vs 0.099 ms) | **0% → 0%** (ไม่มี loss ทั้งคู่) |
+
+### การวิเคราะห์เชิงลึก
+
+**1. ทำไมตัวเลข throughput ต่ำกว่างานอื่น?**
+- งานอื่นที่ +15–30% throughput มักใช้ **topology ที่ OSPF เสียเปรียบจริง** (multi-commodity flow, variable demand)
+- topology ของเรา (14 nodes, 96 links) มี bandwidth เพียงพอจน **OSPF ไม่ bottleneck** (loss = 0%) → ไม่มี gap ให้ AI ช่วยได้มาก
+- งาน [6] ได้ +26.81% เพราะ measure ใน scenario ที่มี **congestion จริง** (multiple flows แย่ง bandwidth)
+- **บทเรียนสำคัญ:** ต้องออกแบบ **traffic scenario ที่ OSPF เสียเปรียบ** (heavy-tailed traffic, many-to-many flows, link failure)
+
+**2. สิ่งที่เราทำได้ดีกว่างานอื่น:**
+- ✅ **Transfer Learning**: งานอื่นเทรนจากศูนย์ทุกครั้ง — เราใช้ pretrain → fine-tune ลดเวลา 7 เท่า
+- ✅ **Reward Shaping 4 Component**: งานอื่นใช้ pure metric reward — เราเพิ่ม exploration/diversity/novelty bonuses ที่แก้ safe-action ได้จริง (0 → 5-10 links/step during training)
+- ✅ **ONOS 2.7.0 จริง**: งานอื่นส่วนใหญ่ใช้ simulator — เรา measure จริงผ่าน Mininet OVS + iperf
+- ✅ **Latency improvement −29.3%**: ตัวเลขนี้ดีกว่า IET paper (−9.16%) — แม้ throughput จะใกล้เคียง
+
+**3. Gap ที่ต้องแก้ก่อนนำเสนอ:**
+- ❌ **Throughput improvement ต่ำ (+0.46%)** — ต้องออกแบบ scenario ที่ OSPF bottleneck (เพิ่ม flows / ลด link capacity / จำลอง link failure)
+- ❌ **Deterministic eval ยังเล่นเซฟ** — ต้องเพิ่ม temperature/exploration ตอน eval
+- ❌ **Zero-Shot Generalization** — ยังไม่ได้ทดสอบ (pipeline มีแล้ว ต้องรันบน topology ใหม่)
+
+> **สรุปสำหรับสไลด์:** "เปรียบเทียบกับงานวิจัย 7 ชิ้น — งานของเราเป็นหนึ่งในไม่กี่ชิ้นที่ใช้ PPO+GNN กับ ONOS จริง (ไม่ใช่ simulator)
+> และเป็นชิ้นเดียวที่มี Transfer Learning + Reward Shaping 4-component — latency ลดลง 29.3% เทียบกับ OSPF
+> แต่ throughput improvement ยังต่ำ (+0.46%) เพราะ topology ปัจจุบันไม่ bottleneck พอ ต้องปรับ traffic scenario"
+
+
 ## 2️⃣ Zero-Shot Generalization Test (โจทย์ "ย้าย Topology โดยไม่เทรนใหม่")
 
 | Method | Topology เดิม — Packet Loss (%) | Topology ใหม่ (Zero-Shot) — Packet Loss (%) |
