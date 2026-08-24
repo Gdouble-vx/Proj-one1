@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-08-19",
+  "environment": "ONOS 2.7.0 Docker + Mininet 14 switches + 96 links",
+  "scenario": "Asymmetric bandwidth (s1→s5,s6=5Mbps, s1→s7,s8=50Mbps, s1→s9=40Mbps)",
+  "results": {
+    "ospf_throughput_mbps": 34.8,
+    "ppo_gnn_throughput_mbps": 34.7,
+    "baseline_no_tc_mbps": 26362,
+    "symmetric_10mbps_mbps": 9.53
+  },
+  "notes": [
+    "ONOS fwd app uses hop count, not link weights",
+    "Link weights via REST API not respected by fwd app",
+    "tc limits create real congestion scenario",
+    "Framework ready for PPO+GNN vs OSPF comparison"
+  ]
+}

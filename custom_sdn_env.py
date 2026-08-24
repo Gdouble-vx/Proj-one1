@@ -152,7 +152,7 @@ def measure_real_metrics(vm1_ip="192.168.10.165"):
 class CustomSDNEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, vm1_ip="192.168.10.165", num_nodes=14, max_links=50,
+    def __init__(self, vm1_ip="192.168.10.165", num_nodes=14, max_links=21,
                  gnn_output_dim=32, obs_mode="raw", use_real_metrics=True,
                  step_delay=2.5, seed=42):
         """obs_mode: "raw" = node+edge features ตรงกับ FastSDNEnv (สำหรับ policy-side GNN)

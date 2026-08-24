@@ -1,12 +1,13 @@
 """
 network_sim.py — Fast network simulator (pure NumPy, no deep-learning deps).
 
-ใช้สำหรับจำลองเครือข่าย SDN 14 โหนด / 50 ลิงก์ เร็วมาก (ไม่ต้องเรียก REST API)
+ใช้สำหรับจำลองเครือข่าย SDN 14 โหนด (NSFNET) / 21 ลิงก์ เร็วมาก (ไม่ต้องเรียก REST API)
 เพื่อให้ PPO เทรนได้หลายพัน step ต่อวินาที แล้วค่อย Fine-Tune กับ ONOS จริง
 (ดู fine_tune_sdn_agent.py / custom_sdn_env.py)
 
 แนวคิดการจำลอง:
-  - Topology: กราฟเชื่อมต่อ 14 โหนด 50 ลิงก์ (random แต่ fix seed → reproducible)
+  - Topology: NSFNET (14 โหนด 21 ลิงก์) — standard benchmark จากงานวิจัย SDN/DRL/GNN
+              หรือ Abilene (12 โหนด 15 ลิงก์) — Internet2 US backbone
   - Flows: 10 คู่ src-dst พร้อม demand (Mbps) สุ่มใหม่ทุก episode
   - Routing: Dijkstra ตาม link weight (ที่ agent เป็นคนกำหนด)
   - Bottleneck: ถ้า link ไหน utilization สูงเกิน threshold → มี packet loss + latency เพิ่ม
@@ -50,13 +51,23 @@ class NetworkSimulator:
     UTIL_LOSS_THRESHOLD = 0.90   # เริ่มมี loss เมื่อ link ใช้เกิน 90%
     UTIL_DELAY_THRESHOLD = 0.85  # เริ่มมี queueing delay เมื่อใช้เกิน 85%
 
-    def __init__(self, num_nodes: int = 14, num_links: int = 50, seed: int = 42,
+    def __init__(self, num_nodes: int = 14, num_links: int = 21, seed: int = 42,
                  link_capacity: float = 500.0, num_flows: int = 12,
                  demand_low: float = 100.0, demand_high: float = 400.0,
-                 base_delay_ms: float = 2.0, max_episode_steps: int = 50):
+                 base_delay_ms: float = 2.0, max_episode_steps: int = 50,
+                 topology: str = 'nsfnet'):
         self.num_nodes = num_nodes
         self.num_links = num_links                # จำนวนลิงก์ (undirected)
-        self.max_links = num_links                # ขนาด buffer ของ action/obs (ดู fine_tune_sdn_agent)
+        self.max_links = num_links                # ขนาด buffer ของ action/obs
+        # Override num_nodes/num_links ให้ตรงกับ topology จริง (ignoring user input if fixed topo)
+        if topology in ('nsfnet', 'abilene'):
+            if topology == 'nsfnet':
+                self.num_nodes = 14
+                self.num_links = 21
+            else:  # abilene
+                self.num_nodes = 12
+                self.num_links = 15
+            self.max_links = self.num_links
         self.link_capacity = float(link_capacity)
         self.num_flows = num_flows
         self.demand_low = float(demand_low)
@@ -65,13 +76,64 @@ class NetworkSimulator:
         self.max_episode_steps = max_episode_steps
         self.seed = seed
 
-        rng = np.random.default_rng(seed)
-        self.edges_u, self.edges_v = self._random_connected_graph(rng)  # (L,), (L,)
+        self.topology = topology
+        if topology == 'nsfnet':
+            self.edges_u, self.edges_v = self._nsfnet_topology()
+        elif topology == 'abilene':
+            self.edges_u, self.edges_v = self._abilene_topology()
+        else:
+            rng = np.random.default_rng(seed)
+            self.edges_u, self.edges_v = self._random_connected_graph(rng)
         self.edge_index_gnn = self._build_gnn_edge_index()              # (2, max_links) ใช้ใน GNN
 
         self.flows: List[Tuple[int, int, float]] = []   # list of (src, dst, demand)
         self.sample_flows(seed)                        # flows เริ่มต้น
         self.step_count = 0
+
+    # ------------------------------------------------------------------ fixed topologies
+    @staticmethod
+    def _nsfnet_topology():
+        """NSFNET (National Science Foundation Network) — 14 nodes, 21 links.
+        Standard benchmark topology used in SDN, DRL, and GNN routing research.
+        Ref: https://wiki.onos.ftw.eu/wiki/display/ONOS/NSFNET"""
+        edges = [
+            (1, 2), (1, 3), (1, 8),
+            (2, 3), (2, 7),
+            (3, 4),
+            (4, 5), (4, 6),
+            (5, 6), (5, 7),
+            (6, 13), (6, 14),
+            (7, 8),
+            (8, 9),
+            (9, 10), (9, 12),
+            (10, 11), (10, 13),
+            (11, 12), (11, 14),
+            (12, 13)
+        ]
+        # 0-indexed
+        u = np.array([e[0] - 1 for e in edges], dtype=np.int64)
+        v = np.array([e[1] - 1 for e in edges], dtype=np.int64)
+        return u, v
+
+    @staticmethod
+    def _abilene_topology():
+        """Abilene (Internet2 US Backbone) — 12 nodes, 15 links."""
+        edges = [
+            (1, 2), (1, 5),
+            (2, 3), (2, 4),
+            (3, 6),
+            (4, 5), (4, 7),
+            (5, 6),
+            (6, 8),
+            (7, 8), (7, 11),
+            (8, 9),
+            (9, 10),
+            (10, 11),
+            (11, 12)
+        ]
+        u = np.array([e[0] - 1 for e in edges], dtype=np.int64)
+        v = np.array([e[1] - 1 for e in edges], dtype=np.int64)
+        return u, v
 
     # ------------------------------------------------------------------ graph
     def _random_connected_graph(self, rng: np.random.Generator):

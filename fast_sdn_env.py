@@ -22,7 +22,7 @@ from network_sim import NetworkSimulator
 class FastSDNEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, seed: int = 42, num_nodes: int = 14, num_links: int = 50,
+    def __init__(self, seed: int = 42, num_nodes: int = 14, num_links: int = 21,
                  link_capacity: float = 500.0, num_flows: int = 12,
                  max_episode_steps: int = 50, **sim_kwargs):
         super().__init__()
