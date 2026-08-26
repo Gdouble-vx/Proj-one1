@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>NSFNET — PPO+GNN 50k Link Weights Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  #panel {
+    position: fixed; top: 12px; left: 12px;
+    background: rgba(15,23,42,0.95); border: 1px solid #334155;
+    border-radius: 12px; padding: 14px 18px; width: 320px;
+    max-height: 95vh; overflow-y: auto;
+  }
+  #panel h1 { font-size: 15px; color: #38bdf8; margin-bottom: 6px; }
+  #panel h2 { font-size: 13px; color: #94a3b8; margin: 10px 0 4px; }
+  #panel .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+  #panel .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  #panel .bar-bg { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+  #panel .bar { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  #panel select, #panel button {
+    width: 100%; padding: 6px 10px; margin-top: 4px;
+    background: #1e293b; color: #e2e8f0; border: 1px solid #475569;
+    border-radius: 6px; font-size: 12px; cursor: pointer;
+  }
+  #panel select:hover, #panel button:hover { border-color: #38bdf8; }
+  #panel .stat { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+  #panel .stat .val { color: #38bdf8; font-weight: bold; }
+  #tooltip {
+    position: fixed; display: none;
+    background: rgba(15,23,42,0.96); border: 1px solid #38bdf8;
+    border-radius: 8px; padding: 10px 14px; font-size: 12px;
+    color: #e2e8f0; pointer-events: none; white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5); z-index: 100;
+  }
+  #tooltip strong { color: #38bdf8; }
+  .legend { margin-top: 8px; }
+  .legend-row { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 2px 0; }
+  .legend-bar { width: 60px; height: 8px; border-radius: 4px; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+  .badge-green { background: #166534; color: #86efac; }
+  .badge-red { background: #991b1b; color: #fca5a5; }
+  .badge-yellow { background: #854d0e; color: #fde047; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>🔗 NSFNET Topology — PPO+GNN 50k</h1>
+  <p style="font-size:11px;color:#64748b;">14 switches, 21 links — Asymmetric bandwidth</p>
+
+  <div class="row" style="margin-top:8px;">
+    <select id="mode">
+      <option value="ppo50k">PPO+GNN 50k (Best)</option>
+      <option value="ppo5k">PPO+GNN 5k (Checkpoint)</option>
+      <option value="ospf">OSPF (Hop-count)</option>
+      <option value="optimal">Optimal (1/BW)</option>
+    </select>
+  </div>
+  <div class="row"><button id="animate">▶ Animate: OSPF → PPO+GNN 50k</button></div>
+  <div class="row"><button id="animateCompare">📊 Compare All Methods</button></div>
+
+  <h2>📊 Performance Summary</h2>
+  <div id="perfStats"></div>
+
+  <h2>🏆 Top Preferred Links</h2>
+  <div id="topLinks"></div>
+
+  <h2>⚠️ Avoided Links</h2>
+  <div id="avoidLinks"></div>
+
+  <div class="legend" style="margin-top:10px;">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Weight Scale:</div>
+    <div class="legend-row">
+      <div class="legend-bar" style="background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
+      <span>Low → High (AI prefers → AI avoids)</span>
+    </div>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+const tip = document.getElementById('tooltip');
+let W, H, hNode=-1, hLink=-1;
+
+// NSFNET node positions (normalized 0-1)
+const nodes = [
+  {x:.10,y:.30,l:'s1',h:'h1'},{x:.20,y:.10,l:'s2',h:'h2'},{x:.28,y:.32,l:'s3',h:'h3'},
+  {x:.36,y:.48,l:'s4',h:'h4'},{x:.46,y:.28,l:'s5',h:'h5'},{x:.54,y:.48,l:'s6',h:'h6'},
+  {x:.28,y:.08,l:'s7',h:'h7'},{x:.16,y:.55,l:'s8',h:'h8'},{x:.26,y:.72,l:'s9',h:'h9'},
+  {x:.40,y:.74,l:'s10',h:'h10'},{x:.54,y:.88,l:'s11',h:'h11'},{x:.68,y:.72,l:'s12',h:'h12'},
+  {x:.62,y:.52,l:'s13',h:'h13'},{x:.74,y:.32,l:'s14',h:'h14'}
+];
+
+const edges = [
+  [0,1],[0,2],[0,7],[1,2],[1,6],[2,3],[3,4],[3,5],
+  [4,5],[4,6],[5,12],[5,13],[6,7],[7,8],[8,9],[8,11],
+  [9,10],[9,12],[10,11],[10,13],[11,12]
+];
+
+const linkLabels = edges.map(e => `s${e[0]+1}↔s${e[1]+1}`);
+const linkBWs = [150,80,100,20,15,15,100,200,150,150,15,80,100,20,150,200,100,100,200,15,80];
+
+// Weight sets from training + evaluation
+const weightsPPO50k = [2.1,15.3,8.5, 45.2,60.1, 55.8, 5.2,1.8, 2.5,3.1, 80.5,4.2, 6.8, 42.3,1.5, 3.2,1.1, 5.5,7.2, 1.3,55.8, 12.5];
+// Corrected to 21 edges
+const wPPO50k = [2.1,15.3,8.5, 45.2,60.1, 55.8, 5.2,1.8, 2.5,3.1, 80.5,4.2, 6.8, 42.3,1.5, 3.2,1.1, 5.5,7.2, 1.3,55.8];
+const wPPO5k = [3.2,12.1,9.8, 38.5,52.3, 48.2, 6.1,2.5, 3.8,4.2, 72.3,5.8, 7.5, 35.6,2.8, 4.1,2.3, 6.8,8.5, 2.1,48.5];
+const wOSPF = Array(21).fill(1.0);
+const wOptimal = linkBWs.map(bw => +(1000/bw).toFixed(1));
+
+const weightSets = { ppo50k: wPPO50k, ppo5k: wPPO5k, ospf: wOSPF, optimal: wOptimal };
+
+const perfData = {
+  ppo50k: {throughput:103.66, latency:24.65, loss:13.20, vsOSPF:'+5.67%'},
+  ppo5k: {throughput:98.99, latency:30.40, loss:17.30, vsOSPF:'+2.28%'},
+  ospf: {throughput:98.10, latency:30.88, loss:18.20, vsOSPF:'---'},
+  optimal: {throughput:103.00, latency:28.90, loss:13.96, vsOSPF:'+6.06%'},
+};
+
+let currentWeights = [...wPPO50k];
+let targetWeights = [...wPPO5k];
+let animating = false;
+
+function resize() { W = C.width = window.innerWidth; H = C.height = window.innerHeight; }
+window.addEventListener('resize', () => { resize(); draw(); });
+resize();
+
+function sc(n) { const p=70; return {x:p+n.x*(W-p*2), y:p+n.y*(H-p*2)}; }
+
+function weightToColor(w) {
+  const maxW = 85;
+  const t = Math.min(Math.max(w / maxW, 0), 1);
+  const r = Math.round(34 + t * 220);
+  const g = Math.round(197 - t * 160);
+  const b = Math.round(94 - t * 60);
+  return `rgb(${r},${g},${b})`;
+}
+
+function weightToWidth(w) {
+  const maxW = 85;
+  return 1.5 + (1 - w/maxW) * 5;
+}
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+
+  // Background grid
+  ctx.strokeStyle = 'rgba(51,65,85,0.15)';
+  ctx.lineWidth = 0.5;
+  for(let x=0; x<W; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0; y<H; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Edges
+  edges.forEach((e,i) => {
+    const a = sc(nodes[e[0]]), b = sc(nodes[e[1]]);
+    const w = currentWeights[i];
+    const isH = (hLink===i);
+    const bw = linkBWs[i];
+
+    // Shadow
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = weightToWidth(w) + 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.stroke();
+
+    // Main line
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = isH ? weightToWidth(w)+2 : weightToWidth(w);
+    ctx.strokeStyle = isH ? '#38bdf8' : weightToColor(w);
+    ctx.globalAlpha = isH ? 1.0 : 0.85;
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+
+    // Bandwidth label (small, on the line)
+    if (!isH) {
+      const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+      ctx.fillStyle = 'rgba(15,23,42,0.8)';
+      ctx.beginPath();
+      ctx.roundRect(mx-18, my-8, 36, 16, 4);
+      ctx.fill();
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${bw}M`, mx, my);
+    }
+
+    // Hover weight label
+    if (isH) {
+      const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(mx-45, my-18, 90, 36, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`w=${w.toFixed(1)}`, mx, my-4);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(`${bw} Mbps`, mx, my+10);
+    }
+  });
+
+  // Nodes
+  nodes.forEach((n,i) => {
+    const s = sc(n);
+    const isH = (hNode===i);
+    const r = isH ? 22 : 16;
+
+    // Glow
+    if (isH) {
+      const g = ctx.createRadialGradient(s.x,s.y,r,s.x,s.y,r*2.5);
+      g.addColorStop(0,'rgba(56,189,248,0.25)');
+      g.addColorStop(1,'rgba(56,189,248,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,r*2.5,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    // Node circle
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,r,0,Math.PI*2);
+    const g2 = ctx.createRadialGradient(s.x-3,s.y-3,2,s.x,s.y,r);
+    g2.addColorStop(0,'#7dd3fc');
+    g2.addColorStop(1,'#0284c7');
+    ctx.fillStyle = g2;
+    ctx.fill();
+    ctx.strokeStyle = isH?'#f0f9ff':'#38bdf8';
+    ctx.lineWidth = isH?2.5:1.5;
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#0f172a';
+    ctx.font = `bold ${isH?13:11}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.l, s.x, s.y);
+
+    // Host label below
+    ctx.fillStyle = '#64748b';
+    ctx.font = '9px sans-serif';
+    ctx.fillText(n.h, s.x, s.y + r + 10);
+  });
+
+  updatePanel();
+}
+
+function updatePanel() {
+  const mode = document.getElementById('mode').value;
+  const perf = perfData[mode];
+
+  // Performance stats
+  const ps = document.getElementById('perfStats');
+  ps.innerHTML = `
+    <div class="stat"><span>Throughput</span><span class="val">${perf.throughput} Mbps</span></div>
+    <div class="stat"><span>Latency</span><span class="val">${perf.latency} ms</span></div>
+    <div class="stat"><span>Packet Loss</span><span class="val">${perf.loss}%</span></div>
+    <div class="stat"><span>vs OSPF</span><span class="val">${perf.vsOSPF}</span></div>
+  `;
+
+  // Top preferred links (lowest weight)
+  const maxW = Math.max(...currentWeights);
+  const sorted = currentWeights.map((w,i)=>({w,i,bw:linkBWs[i]})).sort((a,b)=>a.w-b.w);
+
+  const tl = document.getElementById('topLinks');
+  let tlHtml = '';
+  sorted.slice(0,5).forEach(({w,i,bw}) => {
+    const pct = (1 - w/maxW) * 100;
+    const col = weightToColor(w);
+    tlHtml += `<div class="row">
+      <div class="dot" style="background:${col}"></div>
+      <span style="width:65px;font-size:11px;">${linkLabels[i]}</span>
+      <div class="bar-bg"><div class="bar" style="width:${pct}%;background:${col}"></div></div>
+      <span style="width:28px;text-align:right;font-size:11px;">${w.toFixed(1)}</span>
+    </div>`;
+  });
+  tl.innerHTML = tlHtml;
+
+  // Avoided links (highest weight)
+  const al = document.getElementById('avoidLinks');
+  let alHtml = '';
+  sorted.slice(-5).reverse().forEach(({w,i,bw}) => {
+    const pct = (1 - w/maxW) * 100;
+    const col = weightToColor(w);
+    alHtml += `<div class="row">
+      <div class="dot" style="background:${col}"></div>
+      <span style="width:65px;font-size:11px;">${linkLabels[i]}</span>
+      <div class="bar-bg"><div class="bar" style="width:${pct}%;background:${col}"></div></div>
+      <span style="width:28px;text-align:right;font-size:11px;">${w.toFixed(1)}</span>
+    </div>`;
+  });
+  al.innerHTML = alHtml;
+}
+
+// Hit testing
+function p2sDist(p,a,b) {
+  const dx=b.x-a.x, dy=b.y-a.y, l2=dx*dx+dy*dy;
+  if(!l2) return Math.hypot(p.x-a.x,p.y-a.y);
+  let t=((p.x-a.x)*dx+(p.y-a.y)*dy)/l2;
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p.x-(a.x+t*dx), p.y-(a.y+t*dy));
+}
+
+C.addEventListener('mousemove', e => {
+  const m = {x:e.clientX, y:e.clientY};
+  hNode=-1; hLink=-1;
+
+  for(let i=0;i<nodes.length;i++){
+    if(Math.hypot(m.x-sc(nodes[i]).x, m.y-sc(nodes[i]).y)<22){hNode=i;break;}
+  }
+  if(hNode===-1){
+    let md=14;
+    edges.forEach((ed,i)=>{
+      const d=p2sDist(m,sc(nodes[ed[0]]),sc(nodes[ed[1]]));
+      if(d<md){md=d;hLink=i;}
+    });
+  }
+
+  if(hNode>=0){
+    const n=nodes[hNode];
+    const adjLinks=edges.map((e,i)=>({e,i})).filter(x=>x.e[0]===hNode||x.e[1]===hNode);
+    let linkStr = adjLinks.map(x=>`<span style="color:${weightToColor(currentWeights[x.i])}">${linkLabels[x.i]}</span> (w=${currentWeights[x.i].toFixed(1)})`).join('<br>');
+    tip.style.display='block';
+    tip.style.left=(e.clientX+14)+'px';
+    tip.style.top=(e.clientY-10)+'px';
+    tip.innerHTML=`<strong>${n.l}</strong> (${n.h})<br>Links: ${adjLinks.length}<br>${linkStr}`;
+  } else if(hLink>=0){
+    const ed=edges[hLink];
+    const w=currentWeights[hLink];
+    const bw=linkBWs[hLink];
+    const verdict = w < 5 ? '<span class="badge badge-green">✅ AI PREFERS</span>' :
+                    w < 20 ? '<span class="badge badge-yellow">⚠️ MODERATE</span>' :
+                    '<span class="badge badge-red">❌ AI AVOIDS</span>';
+    tip.style.display='block';
+    tip.style.left=(e.clientX+14)+'px';
+    tip.style.top=(e.clientY-10)+'px';
+    tip.innerHTML=`<strong>${nodes[ed[0]].l} ↔ ${nodes[ed[1]].l}</strong><br>Weight: <strong>${w.toFixed(1)}</strong><br>Bandwidth: ${bw} Mbps<br>${verdict}`;
+  } else {
+    tip.style.display='none';
+  }
+  draw();
+});
+
+C.addEventListener('mouseleave', ()=>{hNode=-1;hLink=-1;tip.style.display='none';draw();});
+
+// Mode switch
+document.getElementById('mode').addEventListener('change', e => {
+  targetWeights = [...weightSets[e.target.value]];
+  animating = true;
+});
+
+// Animate OSPF → PPO+GNN 50k
+document.getElementById('animate').addEventListener('click', () => {
+  const sequence = [
+    {w: [...wOSPF], mode:'ospf', delay:2500},
+    {w: [...wOptimal], mode:'optimal', delay:2000},
+    {w: [...wPPO5k], mode:'ppo5k', delay:2000},
+    {w: [...wPPO50k], mode:'ppo50k', delay:3000},
+  ];
+  let step = 0;
+  const iv = setInterval(() => {
+    if (step >= sequence.length) { clearInterval(iv); return; }
+    targetWeights = sequence[step].w;
+    document.getElementById('mode').value = sequence[step].mode;
+    step++;
+  }, 2000);
+});
+
+// Compare All
+document.getElementById('animateCompare').addEventListener('click', () => {
+  const methods = ['ospf','ppo5k','ppo50k','optimal'];
+  let step = 0;
+  const iv = setInterval(() => {
+    if (step >= methods.length) { clearInterval(iv); return; }
+    const m = methods[step];
+    targetWeights = [...weightSets[m]];
+    document.getElementById('mode').value = m;
+    step++;
+  }, 3000);
+});
+
+// Smooth interpolation
+setInterval(() => {
+  if (!animating) return;
+  let done = true;
+  for (let i=0; i<currentWeights.length; i++) {
+    const diff = targetWeights[i] - currentWeights[i];
+    if (Math.abs(diff) > 0.05) {
+      currentWeights[i] += diff * 0.1;
+      done = false;
+    } else {
+      currentWeights[i] = targetWeights[i];
+    }
+  }
+  if (done) animating = false;
+  draw();
+}, 30);
+
+draw();
+</script>
+</body>
+</html>
