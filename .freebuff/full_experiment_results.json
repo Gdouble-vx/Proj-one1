@@ -1,0 +1,47 @@
+{
+  "experiment": "PPO+GNN Training Schedules + Zero-Shot Generalization",
+  "infrastructure": "ONOS 1.15 + Mininet (14 switches, 21 links)",
+  "training_schedules": {
+    "5000_steps": {
+      "nsfnet_throughput_mbps": 99.9,
+      "nsfnet_latency_ms": 30.5,
+      "nsfnet_loss_pct": 17.9,
+      "training_time_s": 13.7,
+      "zero_shot_abilene_mbps": 105.2,
+      "improvement_vs_ospp": -0.0
+    },
+    "10000_steps": {
+      "nsfnet_throughput_mbps": 99.9,
+      "nsfnet_latency_ms": 30.5,
+      "nsfnet_loss_pct": 17.9,
+      "training_time_s": 27.5,
+      "zero_shot_abilene_mbps": 105.2,
+      "improvement_vs_ospp": -0.0
+    },
+    "50000_steps": {
+      "nsfnet_throughput_mbps": 100.0,
+      "nsfnet_latency_ms": 31.2,
+      "nsfnet_loss_pct": 17.8,
+      "training_time_s": 138.5,
+      "zero_shot_abilene_mbps": 105.2,
+      "improvement_vs_ospp": 0.0
+    }
+  },
+  "baselines": {
+    "nsfnet_ospp": {"throughput_mbps": 99.9, "latency_ms": 30.5, "loss_pct": 17.9},
+    "nsfnet_optimal": {"throughput_mbps": 103.5, "latency_ms": 34.7, "loss_pct": 14.9},
+    "abilene_ospp": {"throughput_mbps": 105.2, "latency_ms": 26.3, "loss_pct": 13.8},
+    "abilene_optimal": {"throughput_mbps": 111.3, "latency_ms": 10.2, "loss_pct": 9.1}
+  },
+  "zero_shot_observation_mismatch": {
+    "nsfnet_obs_size": 77,
+    "abilene_obs_size": 59,
+    "solution": "Pad observations with zeros to match source topology size",
+    "result": "Zero-shot transfer works but PPO doesn't outperform OSPF"
+  },
+  "analysis": {
+    "why_ppo_not_beating_ospf": "MlpPolicy cannot understand graph topology structure from flat 77-dimensional observation vector. Agent needs GNN to process node features and edge connections properly.",
+    "asymmetric_topology_effect": "Narrow links (15-20 Mbps) create real bottlenecks: Flow through narrow link gets 14.3 Mbps vs 83.2 Mbps through wide links. This is exploitable by GNN-based routing.",
+    "recommendation": "Use GNN-based policy (SDNGraphFeatureExtractor) for meaningful improvement over OSPF. Current MlpPolicy converges to OSPF-like behavior."
+  }
+}
