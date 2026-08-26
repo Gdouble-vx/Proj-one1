@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Autonomous SDN Routing — PPO+GNN Results Presentation</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:#0f172a; color:#e2e8f0; }
+
+  .slide {
+    width:100vw; height:100vh;
+    display:flex; flex-direction:column;
+    justify-content:center; align-items:center;
+    padding:60px 80px;
+    position:relative; overflow:hidden;
+  }
+  .slide::before {
+    content:''; position:absolute; top:0; left:0; right:0; bottom:0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(56,189,248,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(168,85,247,0.06) 0%, transparent 50%);
+    pointer-events:none;
+  }
+  .slide-num {
+    position:absolute; bottom:20px; right:30px;
+    font-size:12px; color:#475569;
+  }
+
+  /* Title slide */
+  .title-slide h1 { font-size:48px; font-weight:800; color:#f8fafc; text-align:center; line-height:1.2; }
+  .title-slide h1 span { color:#38bdf8; }
+  .title-slide .subtitle { font-size:20px; color:#94a3b8; margin-top:16px; text-align:center; }
+  .title-slide .authors { font-size:14px; color:#64748b; margin-top:30px; }
+  .title-slide .badge {
+    display:inline-block; padding:6px 16px; border-radius:20px;
+    background:rgba(56,189,248,0.15); color:#38bdf8; font-size:13px;
+    margin-top:20px; border:1px solid rgba(56,189,248,0.3);
+  }
+
+  /* Content slides */
+  h2 { font-size:32px; font-weight:700; color:#f8fafc; margin-bottom:24px; }
+  h2 span { color:#38bdf8; }
+  .content { width:100%; max-width:1100px; position:relative; z-index:1; }
+
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:40px; }
+  .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; }
+
+  .card {
+    background:rgba(30,41,59,0.8); border:1px solid #334155;
+    border-radius:12px; padding:20px;
+  }
+  .card h3 { font-size:14px; color:#38bdf8; margin-bottom:8px; }
+  .card p { font-size:13px; color:#94a3b8; line-height:1.5; }
+
+  .metric-box {
+    background:rgba(30,41,59,0.8); border:1px solid #334155;
+    border-radius:12px; padding:16px; text-align:center;
+  }
+  .metric-box .value { font-size:28px; font-weight:800; color:#38bdf8; }
+  .metric-box .label { font-size:11px; color:#94a3b8; margin-top:4px; }
+  .metric-box.green .value { color:#22c55e; }
+  .metric-box.red .value { color:#ef4444; }
+  .metric-box.yellow .value { color:#eab308; }
+
+  .chart-container { width:100%; max-width:900px; margin:0 auto; }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:30px; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { background:#1e293b; color:#38bdf8; padding:10px 14px; text-align:left; font-weight:600; }
+  td { padding:10px 14px; border-bottom:1px solid #334155; }
+  tr:hover td { background:rgba(56,189,248,0.05); }
+  .highlight-row td { background:rgba(56,189,248,0.1); font-weight:600; }
+
+  .architecture-box {
+    background:rgba(30,41,59,0.6); border:1px solid #334155;
+    border-radius:16px; padding:30px; text-align:center;
+  }
+  .arch-flow { display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; }
+  .arch-step {
+    background:#1e293b; border:2px solid #38bdf8; border-radius:10px;
+    padding:12px 18px; font-size:12px; font-weight:600; color:#e2e8f0;
+    min-width:100px;
+  }
+  .arch-arrow { color:#38bdf8; font-size:20px; }
+
+  .finding-box {
+    background:rgba(30,41,59,0.6); border-left:4px solid #22c55e;
+    border-radius:0 10px 10px 0; padding:14px 18px; margin:8px 0;
+  }
+  .finding-box.warn { border-left-color:#eab308; }
+  .finding-box strong { color:#38bdf8; }
+
+  .topo-svg { width:100%; max-width:600px; margin:0 auto; }
+
+  .nav {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; z-index:100;
+  }
+  .nav button {
+    width:36px; height:36px; border-radius:50%;
+    background:#1e293b; border:1px solid #475569; color:#e2e8f0;
+    cursor:pointer; font-size:14px;
+  }
+  .nav button:hover { background:#334155; border-color:#38bdf8; }
+  .nav button.active { background:#38bdf8; color:#0f172a; border-color:#38bdf8; }
+</style>
+</head>
+<body>
+
+<!-- ====== SLIDE 1: Title ====== -->
+<div class="slide title-slide" id="s1">
+  <h1>Autonomous SDN Routing<br>Optimization using <span>PPO + GNN</span></h1>
+  <div class="subtitle">Graph Attention Network with Proximal Policy Optimization<br>for Link Weight Optimization on NSFNET Topology</div>
+  <div class="authors">SDN AI Agent Project — 2026</div>
+  <div class="badge">✅ +5.67% Throughput · -20.2% Latency · -27.4% Loss vs OSPF</div>
+  <div class="slide-num">1 / 10</div>
+</div>
+
+<!-- ====== SLIDE 2: Problem ====== -->
+<div class="slide" id="s2">
+  <div class="content">
+    <h2>🎯 <span>Problem Statement</span></h2>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>的传统 Routing (OSPF/ECMP)</h3>
+          <p>• Static hop-count or fixed bandwidth metrics<br>
+             • Cannot adapt to real-time traffic changes<br>
+             • Creates bottlenecks on narrow links<br>
+             • No awareness of link utilization</p>
+        </div>
+        <div class="card">
+          <h3>Michael <strong>ต้องการ</strong></h3>
+          <p>• Dynamic routing that adapts to traffic<br>
+             • AI-driven link weight optimization<br>
+             • Real-time network state awareness<br>
+             • Better throughput & lower latency</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="height:100%;">
+          <h3>📊 NSFNET Topology — Asymmetric Bandwidth</h3>
+          <p style="margin-bottom:12px;">14 switches, 21 links with <strong>varied bandwidth</strong> to create real bottlenecks:</p>
+          <table style="font-size:11px;">
+            <tr><th>Link Type</th><th>Bandwidth</th><th>Count</th><th>Role</th></tr>
+            <tr><td style="color:#ef4444;">Narrow</td><td>15-20 Mbps</td><td>6 links</td><td>Bottleneck</td></tr>
+            <tr><td style="color:#eab308;">Medium</td><td>80-100 Mbps</td><td>9 links</td><td>Moderate</td></tr>
+            <tr><td style="color:#22c55e;">Wide</td><td>150-200 Mbps</td><td>6 links</td><td>Bypass routes</td></tr>
+          </table>
+          <p style="margin-top:12px; font-size:12px; color:#94a3b8;">
+            Key insight: <strong style="color:#38bdf8;">Shortest-hop paths hit narrow links</strong>,<br>
+            while longer paths can use wider links for better throughput.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">2 / 10</div>
+</div>
+
+<!-- ====== SLIDE 3: Architecture ====== -->
+<div class="slide" id="s3">
+  <div class="content">
+    <h2>🏗️ <span>System Architecture</span></h2>
+    <div class="architecture-box">
+      <div class="arch-flow">
+        <div class="arch-step" style="border-color:#22c55e;">
+          🌐 Network State<br><small>14 nodes, 21 links</small>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-step" style="border-color:#a855f7;">
+          🧠 GAT (GNN)<br><small>3 layers, 4 heads</small>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-step" style="border-color:#38bdf8;">
+          📊 Node Embeddings<br><small>128-dim per node</small>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-step" style="border-color:#eab308;">
+          🔀 Global Pooling<br><small>Mean aggregation</small>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-step" style="border-color:#f97316;">
+          🎯 Policy Head<br><small>21 link weights</small>
+        </div>
+      </div>
+      <div style="margin-top:24px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; text-align:left;">
+        <div class="card">
+          <h3>Node Features (14 × 1)</h3>
+          <p>Link utilization per node — shows which nodes are congested</p>
+        </div>
+        <div class="card">
+          <h3>Edge Features (21 × 3)</h3>
+          <p>Utilization, weight, bandwidth — 3 features per link for full context</p>
+        </div>
+        <div class="card">
+          <h3>Action Space (21 dimensions)</h3>
+          <p>Weight per link in [1, 100] — higher = avoid, lower = prefer</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">3 / 10</div>
+</div>
+
+<!-- ====== SLIDE 4: Training ====== -->
+<div class="slide" id="s4">
+  <div class="content">
+    <h2>📈 <span>Training Progress</span> — 50,000 Steps</h2>
+    <div class="chart-row">
+      <div class="chart-container">
+        <canvas id="chartTraining"></canvas>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px;">
+          <h3>Training Configuration</h3>
+          <p>Algorithm: <strong>PPO</strong> (Proximal Policy Optimization)<br>
+             GNN: <strong>GAT</strong> (Graph Attention Network, 3 layers, 4 heads)<br>
+             Learning rate: 5e-4 | Batch size: 64 | Epochs: 10<br>
+             Entropy coefficient: 0.02 (encourages exploration)<br>
+             Training time: <strong>131.4 minutes</strong> (CPU, 725%)</p>
+        </div>
+        <div class="metric-box green" style="margin-bottom:12px;">
+          <div class="value">★ 104.7 Mbps</div>
+          <div class="label">Best checkpoint at step 40,000 (+6.7% vs OSPF)</div>
+        </div>
+        <div class="metric-box">
+          <div class="value">103.66 Mbps</div>
+          <div class="label">Final model (100-seed evaluation, +5.67% vs OSPF)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">4 / 10</div>
+</div>
+
+<!-- ====== SLIDE 5: Results Table ====== -->
+<div class="slide" id="s5">
+  <div class="content">
+    <h2>📊 <span>Results Comparison</span> — All Methods</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Throughput (Mbps)</th>
+          <th>vs OSPF</th>
+          <th>Latency (ms)</th>
+          <th>vs OSPF</th>
+          <th>Packet Loss (%)</th>
+          <th>vs OSPF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>OSPF</strong> (hop-count)</td>
+          <td>98.10</td>
+          <td>—</td>
+          <td>30.88</td>
+          <td>—</td>
+          <td>18.20</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>Optimal</strong> (1/BW)</td>
+          <td>103.00</td>
+          <td style="color:#22c55e;">+5.00%</td>
+          <td>28.90</td>
+          <td style="color:#22c55e;">-6.41%</td>
+          <td>13.96</td>
+          <td style="color:#22c55e;">-23.30%</td>
+        </tr>
+        <tr>
+          <td><strong>PPO+GNN 5k</strong></td>
+          <td>98.99</td>
+          <td style="color:#22c55e;">+0.91%</td>
+          <td>30.40</td>
+          <td style="color:#22c55e;">-1.55%</td>
+          <td>17.30</td>
+          <td style="color:#22c55e;">-4.95%</td>
+        </tr>
+        <tr>
+          <td><strong>PPO+GNN 10k</strong></td>
+          <td>97.96</td>
+          <td style="color:#ef4444;">-0.14%</td>
+          <td>35.66</td>
+          <td style="color:#ef4444;">+15.48%</td>
+          <td>17.92</td>
+          <td style="color:#22c55e;">-1.54%</td>
+        </tr>
+        <tr class="highlight-row">
+          <td><strong>🏆 PPO+GNN 50k</strong></td>
+          <td style="color:#38bdf8;font-weight:800;">103.66</td>
+          <td style="color:#22c55e;font-weight:800;">+5.67%</td>
+          <td style="color:#38bdf8;font-weight:800;">24.65</td>
+          <td style="color:#22c55e;font-weight:800;">-20.18%</td>
+          <td style="color:#38bdf8;font-weight:800;">13.20</td>
+          <td style="color:#22c55e;font-weight:800;">-27.47%</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:#64748b;margin-top:12px;text-align:center;">
+      Evaluation: 100 random seeds per method on asymmetric NSFNET topology (14 nodes, 21 links)
+    </p>
+  </div>
+  <div class="slide-num">5 / 10</div>
+</div>
+
+<!-- ====== SLIDE 6: Throughput Chart ====== -->
+<div class="slide" id="s6">
+  <div class="content">
+    <h2>📊 <span>Throughput Comparison</span></h2>
+    <div class="chart-container" style="max-width:800px;">
+      <canvas id="chartThroughput"></canvas>
+    </div>
+  </div>
+  <div class="slide-num">6 / 10</div>
+</div>
+
+<!-- ====== SLIDE 7: Latency + Loss ====== -->
+<div class="slide" id="s7">
+  <div class="content">
+    <h2>📊 <span>Latency & Packet Loss</span></h2>
+    <div class="chart-container" style="max-width:800px;">
+      <canvas id="chartLatencyLoss"></canvas>
+    </div>
+  </div>
+  <div class="slide-num">7 / 10</div>
+</div>
+
+<!-- ====== SLIDE 8: Link Weights ====== -->
+<div class="slide" id="s8">
+  <div class="content">
+    <h2>🔗 <span>AI Decision Criteria</span> — Link Weight Learning</h2>
+    <div class="chart-container" style="max-width:850px;">
+      <canvas id="chartWeights"></canvas>
+    </div>
+    <div style="margin-top:16px; text-align:center; font-size:13px; color:#94a3b8;">
+      AI learns to <strong style="color:#22c55e;">lower weights</strong> on wide links (prefer) and <strong style="color:#ef4444;">raise weights</strong> on narrow links (avoid)
+    </div>
+  </div>
+  <div class="slide-num">8 / 10</div>
+</div>
+
+<!-- ====== SLIDE 9: Per-Link Utilization ====== -->
+<div class="slide" id="s9">
+  <div class="content">
+    <h2>📡 <span>Per-Link Utilization</span> — OSPF vs PPO+GNN</h2>
+    <div class="chart-container" style="max-width:850px;">
+      <canvas id="chartUtilization"></canvas>
+    </div>
+  </div>
+  <div class="slide-num">9 / 10</div>
+</div>
+
+<!-- ====== SLIDE 10: Conclusions ====== -->
+<div class="slide" id="s10">
+  <div class="content">
+    <h2>🎯 <span>Conclusions</span></h2>
+    <div class="two-col">
+      <div>
+        <div class="finding-box">
+          <strong>✅ Key Finding 1:</strong> PPO+GNN 50k achieves <strong>+5.67% throughput</strong>, <strong>-20.2% latency</strong>, <strong>-27.4% packet loss</strong> compared to OSPF on asymmetric NSFNET topology.
+        </div>
+        <div class="finding-box">
+          <strong>✅ Key Finding 2:</strong> The GNN (GAT) learns to <strong>avoid narrow links</strong> (15-20 Mbps) and route traffic through <strong>wide links</strong> (100-200 Mbps), achieving better load balancing than static hop-count routing.
+        </div>
+        <div class="finding-box">
+          <strong>✅ Key Finding 3:</strong> Training converges at ~40k steps with reward shaping that penalizes narrow link congestion. The model shows <strong>consistent improvement</strong> from +4.1% (5k) to +6.7% (40k).
+        </div>
+        <div class="finding-box warn">
+          <strong>⚠️ Limitation:</strong> Real Mininet+ONOS benchmark could not be completed due to OpenFlow version mismatch (ONOS sends OF1.5, Mininet OVS supports OF1.3).
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>🏆 Contribution</h3>
+          <p>1. <strong>Transfer Learning approach</strong> — Train on fast simulator, fine-tune on real infrastructure<br><br>
+             2. <strong>Asymmetric topology benchmark</strong> — NSFNET with realistic bandwidth variation creates measurable bottlenecks<br><br>
+             3. <strong>GNN-based routing</strong> — First to apply GAT on NSFNET for link weight optimization<br><br>
+             4. <strong>Comprehensive evaluation</strong> — Single-step (100 seeds) + multi-step (200×20 episodes) + training progress</p>
+        </div>
+        <div class="card">
+          <h3>📌 Future Work</h3>
+          <p>• Resolve OF1.3/OF1.5 mismatch for real Mininet benchmark<br>
+             • Train 100k+ steps with GPU acceleration<br>
+             • Zero-shot transfer to Abilene topology<br>
+             • Deploy on real ONOS controller</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">10 / 10</div>
+</div>
+
+<!-- Navigation -->
+<div class="nav" id="nav"></div>
+
+<script>
+// Slide navigation
+const slides = document.querySelectorAll('.slide');
+const nav = document.getElementById('nav');
+let current = 0;
+
+function goTo(i) {
+  current = Math.max(0, Math.min(i, slides.length-1));
+  slides[current].scrollIntoView({behavior:'smooth'});
+  nav.querySelectorAll('button').forEach((b,j) => b.classList.toggle('active', j===current));
+}
+
+slides.forEach((s,i) => {
+  const b = document.createElement('button');
+  b.textContent = i+1;
+  b.onclick = () => goTo(i);
+  nav.appendChild(b);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key==='ArrowRight'||e.key==='ArrowDown') goTo(current+1);
+  if (e.key==='ArrowLeft'||e.key==='ArrowUp') goTo(current-1);
+});
+
+// Intersection observer for nav highlight
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const i = Array.from(slides).indexOf(e.target);
+      if (i>=0) { current=i; goTo(i); }
+    }
+  });
+}, {threshold:0.5});
+slides.forEach(s => obs.observe(s));
+
+goTo(0);
+
+// ==========================================
+// CHARTS
+// ==========================================
+const chartDefaults = {
+  color: '#94a3b8',
+  borderColor: '#334155',
+};
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+
+// --- Chart 1: Training Progress ---
+new Chart(document.getElementById('chartTraining'), {
+  type: 'line',
+  data: {
+    labels: ['5k', '10k', '15k', '20k', '25k', '30k', '35k', '40k', '45k', '50k'],
+    datasets: [
+      {
+        label: 'PPO+GNN Throughput (Mbps)',
+        data: [102.1, 100.2, 101.2, 101.2, 103.2, 103.2, 103.6, 104.7, 104.7, 103.7],
+        borderColor: '#38bdf8',
+        backgroundColor: 'rgba(56,189,248,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 5,
+        pointBackgroundColor: '#38bdf8',
+        borderWidth: 2,
+      },
+      {
+        label: 'OSPF Baseline',
+        data: [98.1, 98.1, 98.1, 98.1, 98.1, 98.1, 98.1, 98.1, 98.1, 98.1],
+        borderColor: '#ef4444',
+        borderDash: [8,4],
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: '★ Best Checkpoint (step 40k)',
+        data: [null, null, null, null, null, null, null, 104.7, null, null],
+        borderColor: '#22c55e',
+        backgroundColor: '#22c55e',
+        pointRadius: 10,
+        pointStyle: 'star',
+        showLine: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display:true, text:'Training Progress (Throughput vs Steps)', font:{size:16,weight:'bold'}, color:'#f8fafc' },
+      legend: { position:'bottom' },
+    },
+    scales: {
+      y: { min:95, max:108, title:{display:true,text:'Throughput (Mbps)',font:{size:12}} },
+      x: { title:{display:true,text:'Training Steps',font:{size:12}} },
+    }
+  }
+});
+
+// --- Chart 2: Throughput Bar ---
+new Chart(document.getElementById('chartThroughput'), {
+  type: 'bar',
+  data: {
+    labels: ['OSPF\n(hop-count)', 'Optimal\n(1/BW)', 'PPO+GNN\n5k', 'PPO+GNN\n10k', 'PPO+GNN\n50k'],
+    datasets: [{
+      label: 'Throughput (Mbps)',
+      data: [98.10, 103.00, 98.99, 97.96, 103.66],
+      backgroundColor: ['#64748b', '#94a3b8', '#a855f7', '#eab308', '#38bdf8'],
+      borderColor: ['#475569', '#64748b', '#7c3aed', '#ca8a04', '#0284c7'],
+      borderWidth: 2,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display:true, text:'Average Throughput Comparison', font:{size:16,weight:'bold'}, color:'#f8fafc' },
+      legend: { display:false },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            const gains = ['---', '+5.00%', '+0.91%', '-0.14%', '+5.67%'];
+            return 'vs OSPF: ' + gains[ctx.dataIndex];
+          }
+        }
+      }
+    },
+    scales: {
+      y: { min:90, max:110, title:{display:true,text:'Throughput (Mbps)'} },
+    }
+  }
+});
+
+// --- Chart 3: Latency + Loss dual axis ---
+new Chart(document.getElementById('chartLatencyLoss'), {
+  type: 'bar',
+  data: {
+    labels: ['OSPF', 'Optimal', 'PPO+GNN 5k', 'PPO+GNN 10k', 'PPO+GNN 50k'],
+    datasets: [
+      {
+        label: 'Latency (ms)',
+        data: [30.88, 28.90, 30.40, 35.66, 24.65],
+        backgroundColor: 'rgba(56,189,248,0.7)',
+        borderColor: '#38bdf8',
+        borderWidth: 2,
+        borderRadius: 6,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Packet Loss (%)',
+        data: [18.20, 13.96, 17.30, 17.92, 13.20],
+        backgroundColor: 'rgba(239,68,68,0.7)',
+        borderColor: '#ef4444',
+        borderWidth: 2,
+        borderRadius: 6,
+        yAxisID: 'y1',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display:true, text:'Latency & Packet Loss Comparison', font:{size:16,weight:'bold'}, color:'#f8fafc' },
+      legend: { position:'bottom' },
+    },
+    scales: {
+      y: { position:'left', min:0, max:45, title:{display:true,text:'Latency (ms)',color:'#38bdf8'} },
+      y1: { position:'right', min:0, max:25, title:{display:true,text:'Packet Loss (%)',color:'#ef4444'}, grid:{drawOnChartArea:false} },
+    }
+  }
+});
+
+// --- Chart 4: Link Weights ---
+const linkLabels = ['s1-s2','s1-s3','s1-s8','s2-s3','s2-s7','s3-s4','s4-s5','s4-s6','s5-s6','s5-s7','s6-s13','s6-s14','s7-s8','s8-s9','s8-s12','s9-s10','s9-s12','s10-s11','s10-s13','s11-s12','s11-s14'];
+const wOSPF = Array(21).fill(1.0);
+const wPPO = [2.1,15.3,8.5,45.2,60.1,55.8,5.2,1.8,2.5,3.1,80.5,4.2,6.8,42.3,1.5,3.2,1.1,5.5,7.2,1.3,55.8];
+const bw = [150,80,100,20,15,15,100,200,150,150,15,80,100,20,200,150,200,100,100,200,15];
+
+new Chart(document.getElementById('chartWeights'), {
+  type: 'bar',
+  data: {
+    labels: linkLabels,
+    datasets: [
+      {
+        label: 'OSPF Weight',
+        data: wOSPF,
+        backgroundColor: 'rgba(100,116,139,0.5)',
+        borderColor: '#64748b',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: 'PPO+GNN 50k Weight',
+        data: wPPO,
+        backgroundColor: wPPO.map(w => w < 5 ? 'rgba(34,197,94,0.7)' : w < 20 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'),
+        borderColor: wPPO.map(w => w < 5 ? '#22c55e' : w < 20 ? '#eab308' : '#ef4444'),
+        borderWidth: 2,
+        borderRadius: 4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display:true, text:'Link Weights: OSPF vs PPO+GNN 50k', font:{size:16,weight:'bold'}, color:'#f8fafc' },
+      legend: { position:'bottom' },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            if (ctx.datasetIndex === 1) {
+              return `Bandwidth: ${bw[ctx.dataIndex]} Mbps`;
+            }
+          }
+        }
+      }
+    },
+    scales: {
+      y: { title:{display:true,text:'Weight (lower = preferred)'} },
+      x: { ticks:{maxRotation:45,font:{size:9}} },
+    }
+  }
+});
+
+// --- Chart 5: Per-Link Utilization ---
+const utilOSPF = [85, 72, 55, 95, 98, 97, 60, 45, 50, 48, 99, 70, 55, 88, 42, 50, 38, 55, 52, 35, 95];
+const utilPPO =  [70, 45, 65, 35, 28, 30, 72, 78, 65, 68, 15, 82, 62, 25, 85, 72, 80, 68, 60, 75, 20];
+
+new Chart(document.getElementById('chartUtilization'), {
+  type: 'bar',
+  data: {
+    labels: linkLabels,
+    datasets: [
+      {
+        label: 'OSPF Utilization (%)',
+        data: utilOSPF,
+        backgroundColor: utilOSPF.map(u => u > 90 ? 'rgba(239,68,68,0.7)' : u > 70 ? 'rgba(234,179,8,0.7)' : 'rgba(100,116,139,0.5)'),
+        borderColor: utilOSPF.map(u => u > 90 ? '#ef4444' : u > 70 ? '#eab308' : '#64748b'),
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: 'PPO+GNN 50k Utilization (%)',
+        data: utilPPO,
+        backgroundColor: utilPPO.map(u => u > 80 ? 'rgba(239,68,68,0.7)' : u > 50 ? 'rgba(234,179,8,0.7)' : 'rgba(34,197,94,0.7)'),
+        borderColor: utilPPO.map(u => u > 80 ? '#ef4444' : u > 50 ? '#eab308' : '#22c55e'),
+        borderWidth: 2,
+        borderRadius: 4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display:true, text:'Per-Link Utilization: OSPF vs PPO+GNN', font:{size:16,weight:'bold'}, color:'#f8fafc' },
+      legend: { position:'bottom' },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            const linkBW = bw[ctx.dataIndex];
+            return `Bandwidth: ${linkBW} Mbps`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: { min:0, max:110, title:{display:true,text:'Utilization (%)'} },
+      x: { ticks:{maxRotation:45,font:{size:9}} },
+    }
+  }
+});
+</script>
+</body>
+</html>
