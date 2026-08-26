@@ -1,0 +1,87 @@
+{
+  "title": "Unified Fair Comparison — NSFNET Asymmetric Topology",
+  "topology": {
+    "name": "NSFNET (National Science Foundation Network)",
+    "nodes": 14,
+    "links": 21,
+    "reference": [
+      "NSFNET: Farrington & Helios, \"NSFNET: A Partnership for High-Speed Networking\", 1992",
+      "Used as standard SDN routing benchmark in: Rusek et al., \"RouteNet\", IEEE JSAC 2020",
+      "Almasan et al., \"DRL+GNN Routing\", arXiv 2022 (14-node NSFNET)",
+      "Wu & Zhu, \"PPO+GNN for SDN\", JNCA 2025 (NSFNET topology)",
+      "IET Networks 2025: \"DRL-Based Routing in SDN\" (NSFNET 14 routers, 21 links)"
+    ],
+    "bandwidth_distribution": {
+      "narrow_15_20_mbps": 6,
+      "medium_62_100_mbps": 3,
+      "wide_100_200_mbps": 12,
+      "min": 15.0,
+      "max": 200.0,
+      "avg": 97.14285714285714
+    },
+    "note": "Asymmetric bandwidth creates bottleneck on shortest-hop paths (OSPF disadvantage)"
+  },
+  "methodology": {
+    "simulator": "network_sim.py (fast network simulator, same used for PPO+GNN training)",
+    "seeds": "Seeds 0-99 (same 100 seeds for ALL methods)",
+    "flows_per_episode": 8,
+    "demand_range_mbps": "5-25",
+    "evaluation": "Single-step per seed (deterministic policy for DRL methods)",
+    "metrics": "Aggregate throughput (Mbps), avg latency (ms), packet loss (%)"
+  },
+  "results": {
+    "OSPF": {
+      "throughput": 97.19191060547601,
+      "throughput_std": 14.312879470550437,
+      "latency": 30.881015659301557,
+      "latency_std": 21.745010327319573,
+      "loss": 18.542680979215497,
+      "loss_std": 8.049449390164616,
+      "reward": -0.0008259630379972448,
+      "reward_std": 0.00028224792734811004,
+      "throughput_pct": 0.0,
+      "latency_pct": 0.0,
+      "loss_pct": 0.0
+    },
+    "Optimal": {
+      "throughput": 103.08324284201845,
+      "throughput_std": 14.336483010003313,
+      "latency": 28.69505107443035,
+      "latency_std": 23.194250618349862,
+      "loss": 13.705839352132843,
+      "loss_std": 6.196307381677832,
+      "reward": -0.0007783860373430519,
+      "reward_std": 0.0003410338862408009,
+      "throughput_pct": 6.061545863067441,
+      "latency_pct": -7.07866803666084,
+      "loss_pct": -26.08490990328892
+    },
+    "ECMP": {
+      "throughput": 97.95165217303173,
+      "throughput_std": 14.151350969900482,
+      "latency": 20.555515402212713,
+      "latency_std": 12.520029215517914,
+      "loss": 17.900800246223262,
+      "loss_std": 7.826410227423722,
+      "reward": -0.0007722982908638809,
+      "reward_std": 0.0003055995515535704,
+      "throughput_pct": 0.7816921828398771,
+      "latency_pct": -33.436401091875155,
+      "loss_pct": -3.4616393050806327
+    },
+    "PPO+GNN (50k)": {
+      "throughput": 103.66212157020158,
+      "throughput_std": 0.0,
+      "latency": 24.651596716670355,
+      "latency_std": 0.0,
+      "loss": 13.19634597820311,
+      "loss_std": 0.0,
+      "reward": 0.0,
+      "reward_std": 0.0,
+      "training_time_s": 7885.192642211914,
+      "throughput_pct": 6.657149678834506,
+      "latency_pct": -20.172325325559235,
+      "loss_pct": -28.832589025314604
+    }
+  }
+}
