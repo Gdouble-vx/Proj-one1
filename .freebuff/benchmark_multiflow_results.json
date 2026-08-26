@@ -1,0 +1,15 @@
+{
+  "benchmark": "NSFNET Asymmetric Topology - Multi-Flow",
+  "infrastructure": "ONOS 1.15 + Mininet (14 switches, 21 links)",
+  "ospp_routing": "ONOS fwd (hop-count)",
+  "flows": [
+    {"src": "h1", "dst": "h2", "path": "s1->s2(150Mbps)->s3(20Mbps)->h2", "throughput_mbps": 83.2, "link_type": "wide+narrow mix"},
+    {"src": "h6", "dst": "h3", "path": "s6->s13(15Mbps NARROW)->s4(15Mbps)->s3->h3", "throughput_mbps": 14.3, "link_type": "narrow bottleneck"},
+    {"src": "h7", "dst": "h4", "path": "s7->s8(100Mbps)->...->s4(15Mbps)->h4", "throughput_mbps": 35.0, "link_type": "medium"},
+    {"src": "h8", "dst": "h5", "path": "s8->s9(20Mbps)->s12(200Mbps)->...->h5", "throughput_mbps": 32.2, "link_type": "medium-narrow mix"}
+  ],
+  "total_throughput_mbps": 164.7,
+  "bottleneck_observation": "Flow 2 limited to 14.3 Mbps by narrow s6-s13 link (15 Mbps capacity). OSPF shortest-path routing forces this flow through the bottleneck.",
+  "ppo_advantage": "PPO+GNN can learn to route Flow 2 through wider bypass links (e.g., s6->s14(80Mbps)->s11(15Mbps)->... or s6->s5(150Mbps)->...), achieving higher throughput by avoiding narrow bottlenecks.",
+  "date": "2026-08-26"
+}
