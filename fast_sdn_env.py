@@ -4,8 +4,8 @@ fast_sdn_env.py — FastSDNEnv (gymnasium wrapper รอบ NetworkSimulator)
 จำลองเครือข่ายแบบเร็วมากสำหรับเทรน PPO (หลายพัน step/วินาที)
 จากนั้นค่อยสลับไปเทรนต่อกับ ONOS จริงผ่าน --env onos (CustomSDNEnv)
 
-Observation: node_feat(14) + edge_attr(50*2)  → 114 มิติ (raw graph state)
-Action:      link weights 50 มิติ ในช่วง [1, 100]
+Observation: node_feat(14) + edge_attr(21*3)  → 77 มิติ (raw graph state)
+Action:      link weights 21 มิติ ในช่วง [1, 100]
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class FastSDNEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, seed: int = 42, num_nodes: int = 14, num_links: int = 21,
-                 link_capacity: float = 500.0, num_flows: int = 12,
+                 link_capacity: float = 100.0, num_flows: int = 8,
                  max_episode_steps: int = 50, **sim_kwargs):
         super().__init__()
         self.sim = NetworkSimulator(
@@ -35,7 +35,7 @@ class FastSDNEnv(gym.Env):
         self.max_links = self.sim.max_links
         self.max_episode_steps = max_episode_steps
 
-        obs_dim = self.num_nodes + 2 * self.max_links
+        obs_dim = self.num_nodes + 3 * self.max_links  # 3 features per edge: util, weight, bandwidth
         self.observation_space = spaces.Box(low=0.0, high=np.inf,
                                             shape=(obs_dim,), dtype=np.float32)
         self.action_space = spaces.Box(low=1.0, high=100.0,
