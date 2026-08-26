@@ -410,6 +410,30 @@ Training log อัตโนมัติ: `results/train_gnn_fast_base.csv` (ม
 3. **Reward shaping ได้ผล** — penalty สำหรับ narrow link congestion ทำให้ model ไม่เล่น safe
 4. **GNN เข้าใจ topology** — GAT layers ทำ message passing ผ่าน actual NSFNET edges
 
+### 6.4 Final Results — PPO+GNN 50k Steps (100 seeds evaluation)
+
+| Metric | OSPF | PPO+GNN 50k | Improvement |
+|---|---|---|---|
+| **Throughput (Mbps)** | 98.10 | **103.66** | **+5.67%** |
+| **Latency (ms)** | 30.88 | **24.65** | **-20.2%** |
+| **Packet Loss (%)** | 18.20 | **13.20** | **-27.4%** |
+| **Training Time** | - | 131.4 min | - |
+
+### 6.5 Training Progress (50k Steps)
+
+| Step | Throughput | vs OSPF | Latency | Loss |
+|---|---|---|---|---|
+| 5,000 | 102.1 Mbps | +4.1% | 32.4ms | 15.9% |
+| 10,000 | 100.2 Mbps | +2.1% | 37.4ms | 17.5% |
+| 15,000 | 101.2 Mbps | +3.1% | 36.9ms | 16.8% |
+| 20,000 | 101.2 Mbps | +3.1% | 36.9ms | 16.8% |
+| 25,000 | 103.2 Mbps | +5.2% | 32.4ms | 15.1% |
+| 30,000 | 103.2 Mbps | +5.2% | 32.5ms | 15.1% |
+| 35,000 | 103.6 Mbps | +5.6% | 31.3ms | 14.8% |
+| 40,000 | **104.7 Mbps** | **+6.7%** | **29.7ms** | **13.9%** |
+| 45,000 | 104.7 Mbps | +6.7% | 29.7ms | 13.9% |
+| **Final (100 seeds)** | **103.66 Mbps** | **+5.67%** | **24.65ms** | **13.20%** |
+
 ---
 
 ### Slide: สรุปผล (Key Findings) — ตัวเลขจาก simulator (ตัวอย่าง)
