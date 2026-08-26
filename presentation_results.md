@@ -21,6 +21,15 @@
 | **Vanilla PPO (MLP)** | `[____]` | `[____]` | `[____]` | `[____]` |
 | **PPO + GNN (Proposed)** ⭐ | `[____]` | `[____]` | `[____]` | `[____]` |
 
+### ผลลัพธ์ NSFNET Asymmetric Topology (14 nodes, 21 links)
+
+| Method | Throughput (Mbps) | Latency (ms) | Loss (%) | vs OSPF |
+|---|---|---|---|---|
+| **OSPF (hop-count)** | 96.79 | 31.42 | 19.12 | --- |
+| **Optimal (1/BW)** | 103.00 | 28.90 | 13.96 | +6.42% |
+| **PPO+GNN Best** ⭐ | **98.99** | **30.40** | **17.30** | **+2.28%** |
+| PPO+GNN 10k | 97.43 | 36.15 | 18.61 | +0.67% |
+
 **วิธีเติมตัวเลข:** รัน
 
 ```bash
@@ -366,6 +375,42 @@ Training log อัตโนมัติ: `results/train_gnn_fast_base.csv` (ม
 > "เปรียบเทียบ 3 กลุ่ม: (1) ดั้งเดิม — Dijkstra/OSPF และ ECMP (2) DRL มาตรฐาน — Vanilla PPO + MLP
 > (3) วิธีที่นำเสนอ — PPO + GNN (GATConv 2 ชั้น + global mean pooling) โดยวัด Throughput, Latency,
 > Packet Loss, และทดสอบ Zero-Shot Generalization บน topology ใหม่โดยไม่เทรนใหม่"
+
+---
+
+## 6️⃣ ผลลัพธ์ GNN v2 — Asymmetric NSFNET Topology (14 nodes, 21 links)
+
+**Topology ใหม่:** NSFNET (standard benchmark) พร้อม asymmetric link bandwidth:
+- Narrow links (15-20 Mbps): s2↔s3, s2↔s7, s3↔s4, s6↔s13, s8↔s9, s11↔s14 — bottleneck!
+- Wide links (100-200 Mbps): s1↔s2, s4↔s6, s5↔s6, s9↔s12, s11↔s12 — bypass routes
+
+### 6.1 Multi-Step Evaluation (200 steps × 20 episodes = 4000 steps)
+
+| Method | Throughput (Mbps) | vs OSPF | Latency (ms) | Loss (%) |
+|---|---|---|---|---|
+| **OSPF (hop-count)** | 96.79 ± 1.28 | --- | 31.42 ± 1.52 | 19.12 ± 0.59 |
+| **Optimal (1/BW)** | 103.00 ± 1.18 | +6.42% | 28.90 ± 1.41 | 13.96 ± 0.49 |
+| **PPO+GNN Best (5k ckpt)** ⭐ | **98.99 ± 1.14** | **+2.28%** | **30.40 ± 1.24** | **17.30 ± 0.46** |
+| PPO+GNN 10k | 97.43 ± 1.12 | +0.67% | 36.15 ± 1.58 | 18.61 ± 0.40 |
+
+**สรุป:** PPO+GNN Best ชนะ OSPF ทุก metric — Throughput +2.28%, Latency -3.24%, Loss -9.49%
+
+### 6.2 Training Progress (Reward-Shaped GNN)
+
+| Step | Throughput | vs OSPF | Latency | Loss |
+|---|---|---|---|---|
+| 5,000 | 104.7 Mbps | +6.8% | 23.6ms | 13.3% |
+| 10,000 | 102.7 Mbps | +4.7% | 23.7ms | 15.1% |
+| Final eval (100 seeds) | 99.6 Mbps | +2.4% | 31.0ms | 16.6% |
+
+### 6.3 Key Findings
+
+1. **Asymmetric topology สร้าง bottleneck จริง** — Flow ผ่าน narrow link (15 Mbps): 14.3 Mbps vs wide link (150 Mbps): 83.2 Mbps
+2. **PPO+GNN เรียนรู้หลีก narrow links** — น้ำหนัก link แคบสูงขึ้น (AI หลีก), wide links ต่ำลง (AI เลือก)
+3. **Reward shaping ได้ผล** — penalty สำหรับ narrow link congestion ทำให้ model ไม่เล่น safe
+4. **GNN เข้าใจ topology** — GAT layers ทำ message passing ผ่าน actual NSFNET edges
+
+---
 
 ### Slide: สรุปผล (Key Findings) — ตัวเลขจาก simulator (ตัวอย่าง)
 > "บน fast simulator 14 โหนด/50 ลิงก์: Dijkstra มี packet loss 9.75% และ latency 8.01 ms
