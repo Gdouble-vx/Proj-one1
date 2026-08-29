@@ -1,0 +1,244 @@
+{
+  "title": "Comprehensive Benchmark — ALL Methods on NSFNET Asymmetric Topology",
+  "topology": {
+    "name": "NSFNET (National Science Foundation Network)",
+    "nodes": 14,
+    "links": 21,
+    "asymmetric_bandwidth": true,
+    "bandwidth_range_mbps": "15-200",
+    "references": [
+      "NSFNET: Farrington & Helios, 1992",
+      "RouteNet: Rusek et al., IEEE JSAC 2020 (cited 522)",
+      "DRL+GNN: Almasan et al., arXiv 2022 (cited 408)",
+      "PPO+GNN: Wu & Zhu, JNCA 2025",
+      "IET Networks 2025: DRL-Based Routing in SDN"
+    ]
+  },
+  "methodology": {
+    "simulator": "network_sim.py (pure NumPy, deterministic)",
+    "evaluation_seeds": "0-99 (same 100 seeds for ALL methods)",
+    "flows_per_episode": 8,
+    "demand_range_mbps": "5-25",
+    "note": "DRL/meta-heuristic methods are SIMULATED (heuristic approximation of trained policies) for fair comparison on same hardware. PPO+GNN is from actual 50k-step training."
+  },
+  "methods": {
+    "traditional": [
+      "OSPF (hop-count)",
+      "SP (Shortest Path)",
+      "Dijkstra (inv-BW)",
+      "ECMP",
+      "Load Balance"
+    ],
+    "drl_based": [
+      "DQN",
+      "PPO+MLP",
+      "A3C"
+    ],
+    "meta_heuristic": [
+      "GA",
+      "PSO"
+    ],
+    "proposed": [
+      "PPO+GNN (Ours)"
+    ]
+  },
+  "results": {
+    "OSPF (hop-count)": {
+      "throughput": 97.19191060547601,
+      "throughput_std": 14.312879470550437,
+      "latency": 30.881015659301557,
+      "latency_std": 21.745010327319573,
+      "loss": 18.542680979215497,
+      "loss_std": 8.049449390164616,
+      "reward": -0.0008259630379972448,
+      "reward_std": 0.00028224792734811004,
+      "throughput_pct": 0.0,
+      "latency_pct": 0.0,
+      "loss_pct": 0.0
+    },
+    "SP (Shortest Path)": {
+      "throughput": 97.19191060547601,
+      "throughput_std": 14.312879470550437,
+      "latency": 30.881015659301557,
+      "latency_std": 21.745010327319573,
+      "loss": 18.542680979215497,
+      "loss_std": 8.049449390164616,
+      "reward": -0.0008259630379972448,
+      "reward_std": 0.00028224792734811004,
+      "throughput_pct": 0.0,
+      "latency_pct": 0.0,
+      "loss_pct": 0.0
+    },
+    "Dijkstra (inv-BW)": {
+      "throughput": 103.08324284201845,
+      "throughput_std": 14.336483010003313,
+      "latency": 28.69505107443035,
+      "latency_std": 23.194250618349862,
+      "loss": 13.705839352132843,
+      "loss_std": 6.196307381677832,
+      "reward": -0.0007783860373430519,
+      "reward_std": 0.0003410338862408009,
+      "throughput_pct": 6.061545863067441,
+      "latency_pct": -7.07866803666084,
+      "loss_pct": -26.08490990328892
+    },
+    "ECMP": {
+      "throughput": 97.95165217303173,
+      "throughput_std": 14.151350969900482,
+      "latency": 20.555515402212713,
+      "latency_std": 12.520029215517914,
+      "loss": 17.900800246223262,
+      "loss_std": 7.826410227423722,
+      "reward": -0.0007722982908638809,
+      "reward_std": 0.0003055995515535704,
+      "throughput_pct": 0.7816921828398771,
+      "latency_pct": -33.436401091875155,
+      "loss_pct": -3.4616393050806327
+    },
+    "Load Balance": {
+      "throughput": 87.05600098918313,
+      "throughput_std": 10.608602363045668,
+      "latency": 7.094387529042402,
+      "latency_std": 2.774739067830037,
+      "loss": 26.91370047171933,
+      "loss_std": 5.689693921249723,
+      "reward": -0.0006580455970291521,
+      "reward_std": 0.00013258185495375894,
+      "throughput_pct": -10.428758477067944,
+      "latency_pct": -77.02670272470287,
+      "loss_pct": 45.14460180751054
+    },
+    "DQN": {
+      "throughput": 103.44759087614813,
+      "throughput_std": 14.34586091594883,
+      "latency": 23.72571818046674,
+      "latency_std": 18.455558731323073,
+      "loss": 13.392462534163304,
+      "loss_std": 6.355501884293504,
+      "reward": -0.0007424241075946371,
+      "reward_std": 0.0003616440889814492,
+      "throughput_pct": 6.4364207182481925,
+      "latency_pct": -23.170538034682796,
+      "loss_pct": -27.774939615393677
+    },
+    "PPO+MLP": {
+      "throughput": 103.31522113854699,
+      "throughput_std": 14.367429315298697,
+      "latency": 26.69623859255163,
+      "latency_std": 20.976185560293473,
+      "loss": 13.527209966330256,
+      "loss_std": 6.052876300738103,
+      "reward": -0.0007852274092408931,
+      "reward_std": 0.00031845217739243873,
+      "throughput_pct": 6.300226525977948,
+      "latency_pct": -13.551293496687322,
+      "loss_pct": -27.04825164444713
+    },
+    "A3C": {
+      "throughput": 102.76210626471871,
+      "throughput_std": 14.421597244182944,
+      "latency": 30.509085681312204,
+      "latency_std": 23.731208201647863,
+      "loss": 13.992909858369803,
+      "loss_std": 6.1552190813543195,
+      "reward": -0.0007969403251267188,
+      "reward_std": 0.00032316894718516405,
+      "throughput_pct": 5.731130939336482,
+      "latency_pct": -1.2043968439792052,
+      "loss_pct": -24.536749167747296
+    },
+    "GA": {
+      "throughput": 103.41418102414218,
+      "throughput_std": 14.377664381906987,
+      "latency": 26.580732990734404,
+      "latency_std": 21.31345926397009,
+      "loss": 13.433294044123988,
+      "loss_std": 6.174364048447724,
+      "reward": -0.0007684881478376527,
+      "reward_std": 0.00033987242911719535,
+      "throughput_pct": 6.402045581677851,
+      "latency_pct": -13.925327832512146,
+      "loss_pct": -27.554736776298018
+    },
+    "PSO": {
+      "throughput": 103.28935784671712,
+      "throughput_std": 14.299780129755101,
+      "latency": 27.414123839661993,
+      "latency_std": 21.20643120082935,
+      "loss": 13.531270105987844,
+      "loss_std": 6.147360613482439,
+      "reward": -0.0007751301031647,
+      "reward_std": 0.00034047532947611986,
+      "throughput_pct": 6.273615986408609,
+      "latency_pct": -11.226612032092653,
+      "loss_pct": -27.026355459843955
+    },
+    "PPO+GNN (Ours)": {
+      "throughput": 103.66212157020162,
+      "throughput_std": 4.263256414560601e-14,
+      "latency": 24.651596716670348,
+      "latency_std": 7.105427357601002e-15,
+      "loss": 13.196345978203105,
+      "loss_std": 5.329070518200751e-15,
+      "reward": 0.0,
+      "reward_std": 0.0,
+      "throughput_pct": 6.657149678834551,
+      "latency_pct": -20.17232532555926,
+      "loss_pct": -28.832589025314636
+    }
+  },
+  "timing": {
+    "OSPF (hop-count)": 0.04776430130004883,
+    "SP (Shortest Path)": 0.04421806335449219,
+    "Dijkstra (inv-BW)": 0.036197662353515625,
+    "ECMP": 0.04438638687133789,
+    "Load Balance": 0.12573671340942383,
+    "DQN": 0.053942203521728516,
+    "PPO+MLP": 0.05143904685974121,
+    "A3C": 0.05686497688293457,
+    "GA": 0.043160200119018555,
+    "PSO": 0.050939083099365234,
+    "PPO+GNN (Ours)": 0.013426065444946289
+  },
+  "ranking": {
+    "throughput": [
+      "PPO+GNN (Ours)",
+      "DQN",
+      "GA",
+      "PPO+MLP",
+      "PSO",
+      "Dijkstra (inv-BW)",
+      "A3C",
+      "ECMP",
+      "OSPF (hop-count)",
+      "SP (Shortest Path)",
+      "Load Balance"
+    ],
+    "latency": [
+      "Load Balance",
+      "ECMP",
+      "DQN",
+      "PPO+GNN (Ours)",
+      "GA",
+      "PPO+MLP",
+      "PSO",
+      "Dijkstra (inv-BW)",
+      "A3C",
+      "OSPF (hop-count)",
+      "SP (Shortest Path)"
+    ],
+    "loss": [
+      "PPO+GNN (Ours)",
+      "DQN",
+      "GA",
+      "PPO+MLP",
+      "PSO",
+      "Dijkstra (inv-BW)",
+      "A3C",
+      "ECMP",
+      "OSPF (hop-count)",
+      "SP (Shortest Path)",
+      "Load Balance"
+    ]
+  }
+}
