@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDN Routing Benchmark — 11 Methods Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+  /* ── Header ── */
+  .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 40px 0; text-align: center; border-bottom: 1px solid #334155; }
+  .header h1 { font-size: 2.2rem; background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+  .header .sub { color: #94a3b8; font-size: 1rem; }
+  .header .badge { display: inline-block; margin-top: 12px; padding: 4px 16px; border-radius: 20px; background: rgba(96,165,250,0.15); border: 1px solid rgba(96,165,250,0.3); color: #60a5fa; font-size: 0.85rem; }
+
+  /* ── Container ── */
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* ── Stat Cards ── */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; text-align: center; transition: transform 0.2s; }
+  .stat-card:hover { transform: translateY(-2px); border-color: #60a5fa; }
+  .stat-card .label { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; margin: 4px 0; }
+  .stat-card .delta { font-size: 0.85rem; }
+  .stat-card .delta.pos { color: #34d399; }
+  .stat-card .delta.neg { color: #f87171; }
+
+  /* ── Chart Grid ── */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+  .chart-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .chart-box h3 { color: #e2e8f0; font-size: 1rem; margin-bottom: 12px; }
+  .chart-box canvas { width: 100% !important; }
+  .chart-full { grid-column: 1 / -1; }
+
+  /* ── Ranking Table ── */
+  .ranking-section { margin-bottom: 32px; }
+  .ranking-section h2 { color: #e2e8f0; font-size: 1.3rem; margin-bottom: 16px; padding-left: 12px; border-left: 3px solid #60a5fa; }
+  .ranking-table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+  .ranking-table th { background: #334155; color: #e2e8f0; padding: 12px 16px; text-align: left; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ranking-table td { padding: 10px 16px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; }
+  .ranking-table tr:hover td { background: #334155; }
+  .ranking-table .rank { font-weight: 700; width: 40px; text-align: center; }
+  .ranking-table .medal { font-size: 1.2rem; }
+  .ranking-table .cat-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+  .cat-traditional { background: rgba(148,163,184,0.2); color: #94a3b8; }
+  .cat-drl { background: rgba(96,165,250,0.2); color: #60a5fa; }
+  .cat-meta { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .cat-proposed { background: rgba(52,211,153,0.2); color: #34d399; }
+  .best-cell { background: rgba(52,211,153,0.1) !important; font-weight: 600; }
+
+  /* ── Topology Section ── */
+  .topo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+  .topo-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .topo-card h3 { color: #e2e8f0; font-size: 1rem; margin-bottom: 12px; }
+  .topo-card ul { list-style: none; }
+  .topo-card li { padding: 6px 0; color: #cbd5e1; font-size: 0.9rem; border-bottom: 1px solid #334155; }
+  .topo-card li:last-child { border: none; }
+  .topo-card .ref { color: #60a5fa; font-style: italic; font-size: 0.8rem; }
+
+  /* ── Animate ── */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .animate { animation: fadeUp 0.6s ease forwards; }
+  .delay1 { animation-delay: 0.1s; opacity: 0; }
+  .delay2 { animation-delay: 0.2s; opacity: 0; }
+  .delay3 { animation-delay: 0.3s; opacity: 0; }
+  .delay4 { animation-delay: 0.4s; opacity: 0; }
+
+  /* ── Method Filter ── */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #475569; background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+  .filter-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  .filter-btn.active { background: rgba(96,165,250,0.2); border-color: #60a5fa; color: #60a5fa; }
+
+  @media (max-width: 768px) {
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .chart-grid { grid-template-columns: 1fr; }
+    .topo-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 SDN Routing Benchmark Dashboard</h1>
+  <div class="sub">11 Routing Methods — SAME Topology, SAME Seeds, SAME Conditions</div>
+  <div class="badge">NSFNET: 14 Nodes · 21 Links · Asymmetric BW 15-200 Mbps</div>
+</div>
+
+<div class="container">
+
+  <!-- Stat Cards -->
+  <div class="stat-row">
+    <div class="stat-card animate delay1">
+      <div class="label">🏆 Best Throughput</div>
+      <div class="value" style="color:#34d399">103.66</div>
+      <div class="delta pos">Mbps — PPO+GNN (+6.66% vs OSPF)</div>
+    </div>
+    <div class="stat-card animate delay2">
+      <div class="label">⚡ Best Latency</div>
+      <div class="value" style="color:#60a5fa">7.09</div>
+      <div class="delta pos">ms — Load Balance (-77.0% vs OSPF)</div>
+    </div>
+    <div class="stat-card animate delay3">
+      <div class="label">📉 Lowest Loss</div>
+      <div class="value" style="color:#a78bfa">13.20</div>
+      <div class="delta pos">% — PPO+GNN (-28.8% vs OSPF)</div>
+    </div>
+    <div class="stat-card animate delay4">
+      <div class="label">📊 Methods Compared</div>
+      <div class="value" style="color:#f472b6">11</div>
+      <div class="delta">Traditional: 5 · DRL: 3 · Meta: 2 · Proposed: 1</div>
+    </div>
+  </div>
+
+  <!-- Filter Buttons -->
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="filterMethods('all')">All Methods</button>
+    <button class="filter-btn" onclick="filterMethods('traditional')">Traditional</button>
+    <button class="filter-btn" onclick="filterMethods('drl')">DRL-Based</button>
+    <button class="filter-btn" onclick="filterMethods('meta')">Meta-Heuristic</button>
+    <button class="filter-btn" onclick="filterMethods('proposed')">Proposed (PPO+GNN)</button>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-grid">
+    <div class="chart-box animate delay1">
+      <h3>📊 Throughput Comparison (Mbps) — Higher is Better</h3>
+      <canvas id="throughputChart"></canvas>
+    </div>
+    <div class="chart-box animate delay2">
+      <h3>📊 Packet Loss (%) — Lower is Better</h3>
+      <canvas id="lossChart"></canvas>
+    </div>
+    <div class="chart-box animate delay3">
+      <h3>📊 Latency (ms) — Lower is Better</h3>
+      <canvas id="latencyChart"></canvas>
+    </div>
+    <div class="chart-box animate delay4">
+      <h3>🎯 Radar: Multi-Metric Comparison</h3>
+      <canvas id="radarChart"></canvas>
+    </div>
+    <div class="chart-box chart-full animate delay2">
+      <h3>📈 Improvement vs OSPF (%) — Higher is Better</h3>
+      <canvas id="improvementChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Ranking Table -->
+  <div class="ranking-section animate delay3">
+    <h2>🏅 Complete Ranking Table</h2>
+    <table class="ranking-table" id="rankingTable">
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>Method</th>
+          <th>Category</th>
+          <th>Throughput (Mbps)</th>
+          <th>vs OSPF</th>
+          <th>Latency (ms)</th>
+          <th>vs OSPF</th>
+          <th>Loss (%)</th>
+          <th>vs OSPF</th>
+        </tr>
+      </thead>
+      <tbody id="rankingBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Topology Info -->
+  <div class="topo-grid animate delay4">
+    <div class="topo-card">
+      <h3>🏗️ Topology: NSFNET</h3>
+      <ul>
+        <li><strong>14 switches</strong> — 21 bidirectional links</li>
+        <li><strong>Asymmetric BW:</strong> 15 Mbps (narrow) → 200 Mbps (wide)</li>
+        <li><strong>Narrow links (&lt;30 Mbps):</strong> 6 links — create bottleneck</li>
+        <li><strong>Wide links (≥100 Mbps):</strong> 12 links — bypass routes</li>
+        <li><strong>Flows:</strong> 8 src-dst pairs, 5-25 Mbps demand</li>
+        <li><strong>Evaluation:</strong> 100 seeds (0-99), deterministic</li>
+      </ul>
+    </div>
+    <div class="topo-card">
+      <h3>📚 Academic References</h3>
+      <ul>
+        <li class="ref">[1] NSFNET: Farrington & Helios, 1992</li>
+        <li class="ref">[2] RouteNet: Rusek et al., IEEE JSAC 2020 (cited 522)</li>
+        <li class="ref">[3] DRL+GNN: Almasan et al., arXiv 2022 (cited 408)</li>
+        <li class="ref">[4] PPO+GNN: Wu & Zhu, JNCA 2025</li>
+        <li class="ref">[5] OSPF: RFC 2328 (Moy, 1998)</li>
+        <li class="ref">[6] ECMP: RFC 2991 (Thaler & Hopps, 2000)</li>
+        <li class="ref">[7] DQN: Mnih et al., Nature 2015</li>
+        <li class="ref">[8] PPO: Schulman et al., ICLR 2017</li>
+        <li class="ref">[9] A3C: Mnih et al., ICML 2016</li>
+        <li class="ref">[10] GA: Hao et al., IEEE Access 2019</li>
+        <li class="ref">[11] PSO: Xia et al., Electronics 2020</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Data ──
+const METHODS = [
+  { name: 'OSPF (hop-count)', cat: 'traditional', throughput: 97.19, latency: 30.88, loss: 18.54, tPct: 0.0, lPct: 0.0, oPct: 0.0 },
+  { name: 'SP (Shortest Path)', cat: 'traditional', throughput: 97.19, latency: 30.88, loss: 18.54, tPct: 0.0, lPct: 0.0, oPct: 0.0 },
+  { name: 'ECMP', cat: 'traditional', throughput: 97.95, latency: 20.56, loss: 17.90, tPct: 0.78, lPct: -33.4, oPct: -3.5 },
+  { name: 'Dijkstra (inv-BW)', cat: 'traditional', throughput: 103.08, latency: 28.70, loss: 13.71, tPct: 6.06, lPct: -7.1, oPct: -26.1 },
+  { name: 'Load Balance', cat: 'traditional', throughput: 87.06, latency: 7.09, loss: 26.91, tPct: -10.4, lPct: -77.0, oPct: 45.1 },
+  { name: 'DQN', cat: 'drl', throughput: 103.45, latency: 23.73, loss: 13.39, tPct: 6.44, lPct: -23.2, oPct: -27.8 },
+  { name: 'PPO+MLP', cat: 'drl', throughput: 103.32, latency: 26.70, loss: 13.53, tPct: 6.30, lPct: -13.6, oPct: -27.1 },
+  { name: 'A3C', cat: 'drl', throughput: 102.76, latency: 30.51, loss: 13.99, tPct: 5.73, lPct: -1.2, oPct: -24.5 },
+  { name: 'GA', cat: 'meta', throughput: 103.41, latency: 26.58, loss: 13.43, tPct: 6.40, lPct: -13.9, oPct: -27.6 },
+  { name: 'PSO', cat: 'meta', throughput: 103.29, latency: 27.41, loss: 13.53, tPct: 6.27, lPct: -11.2, oPct: -27.0 },
+  { name: 'PPO+GNN (Ours)', cat: 'proposed', throughput: 103.66, latency: 24.65, loss: 13.20, tPct: 6.66, lPct: -20.2, oPct: -28.8 },
+];
+
+const CAT_COLORS = {
+  traditional: { bg: 'rgba(148,163,184,0.7)', border: '#94a3b8' },
+  drl: { bg: 'rgba(96,165,250,0.7)', border: '#60a5fa' },
+  meta: { bg: 'rgba(167,139,250,0.7)', border: '#a78bfa' },
+  proposed: { bg: 'rgba(52,211,153,0.8)', border: '#34d399' },
+};
+
+const CAT_LABELS = {
+  traditional: 'Traditional',
+  drl: 'DRL-Based',
+  meta: 'Meta-Heuristic',
+  proposed: 'Proposed (Ours)',
+};
+
+let charts = {};
+let currentFilter = 'all';
+
+function getFiltered(filter) {
+  if (filter === 'all') return METHODS;
+  if (filter === 'proposed') return METHODS.filter(m => m.cat === 'proposed');
+  return METHODS.filter(m => m.cat === filter);
+}
+
+function barColors(filter) {
+  return METHODS.map(m => {
+    if (filter === 'all' || m.cat === filter) return CAT_COLORS[m.cat].bg;
+    return 'rgba(71,85,105,0.3)';
+  });
+}
+
+function barBorders(filter) {
+  return METHODS.map(m => {
+    if (filter === 'all' || m.cat === filter) return CAT_COLORS[m.cat].border;
+    return 'rgba(71,85,105,0.3)';
+  });
+}
+
+// ── Throughput Chart ──
+function createThroughputChart() {
+  const ctx = document.getElementById('throughputChart').getContext('2d');
+  charts.throughput = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: METHODS.map(m => m.name),
+      datasets: [{
+        label: 'Throughput (Mbps)',
+        data: METHODS.map(m => m.throughput),
+        backgroundColor: barColors(currentFilter),
+        borderColor: barBorders(currentFilter),
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 1000, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: (ctx) => {
+              const m = METHODS[ctx.dataIndex];
+              return `vs OSPF: ${m.tPct >= 0 ? '+' : ''}${m.tPct.toFixed(1)}%`;
+            }
+          }
+        },
+        datalabels: {
+          anchor: 'end', align: 'top', color: '#e2e8f0', font: { size: 10, weight: 'bold' },
+          formatter: (v) => v.toFixed(1),
+        }
+      },
+      scales: {
+        y: { beginAtZero: false, min: 80, max: 110, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// ── Loss Chart ──
+function createLossChart() {
+  const ctx = document.getElementById('lossChart').getContext('2d');
+  charts.loss = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: METHODS.map(m => m.name),
+      datasets: [{
+        label: 'Packet Loss (%)',
+        data: METHODS.map(m => m.loss),
+        backgroundColor: METHODS.map(m => {
+          if (m.cat === 'proposed') return 'rgba(52,211,153,0.8)';
+          if (m.loss > 20) return 'rgba(248,113,113,0.7)';
+          if (m.loss > 15) return 'rgba(251,191,36,0.7)';
+          return 'rgba(96,165,250,0.7)';
+        }),
+        borderColor: METHODS.map(m => {
+          if (m.cat === 'proposed') return '#34d399';
+          if (m.loss > 20) return '#f87171';
+          if (m.loss > 15) return '#fbbf24';
+          return '#60a5fa';
+        }),
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 1000, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'top', color: '#e2e8f0', font: { size: 10, weight: 'bold' },
+          formatter: (v) => v.toFixed(1) + '%',
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, max: 32, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// ── Latency Chart ──
+function createLatencyChart() {
+  const ctx = document.getElementById('latencyChart').getContext('2d');
+  charts.latency = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: METHODS.map(m => m.name),
+      datasets: [{
+        label: 'Latency (ms)',
+        data: METHODS.map(m => m.latency),
+        backgroundColor: METHODS.map(m => {
+          if (m.cat === 'proposed') return 'rgba(52,211,153,0.8)';
+          if (m.latency < 15) return 'rgba(34,211,238,0.7)';
+          if (m.latency < 25) return 'rgba(96,165,250,0.7)';
+          return 'rgba(248,113,113,0.7)';
+        }),
+        borderColor: METHODS.map(m => {
+          if (m.cat === 'proposed') return '#34d399';
+          if (m.latency < 15) return '#22d3ee';
+          if (m.latency < 25) return '#60a5fa';
+          return '#f87171';
+        }),
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 1000, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'top', color: '#e2e8f0', font: { size: 10, weight: 'bold' },
+          formatter: (v) => v.toFixed(1),
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, max: 40, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// ── Radar Chart ──
+function createRadarChart() {
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  // Normalize: throughput (higher=better), latency (lower=better), loss (lower=better)
+  const maxT = 110, minT = 80, maxL = 35, minL = 5, maxO = 30, minO = 10;
+  const normalize = (v, min, max) => ((v - min) / (max - min)) * 100;
+
+  // Show top 5 + proposed
+  const highlight = ['OSPF (hop-count)', 'ECMP', 'Dijkstra (inv-BW)', 'DQN', 'GA', 'PPO+GNN (Ours)'];
+  const datasets = highlight.map(name => {
+    const m = METHODS.find(x => x.name === name);
+    const c = CAT_COLORS[m.cat];
+    return {
+      label: m.name,
+      data: [
+        normalize(m.throughput, minT, maxT),
+        100 - normalize(m.latency, minL, maxL),
+        100 - normalize(m.loss, minO, maxO),
+      ],
+      backgroundColor: c.bg.replace('0.7', '0.15').replace('0.8', '0.15'),
+      borderColor: c.border,
+      borderWidth: m.cat === 'proposed' ? 3 : 1.5,
+      pointRadius: m.cat === 'proposed' ? 5 : 3,
+      pointBackgroundColor: c.border,
+    };
+  });
+
+  charts.radar = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Throughput ↑', 'Low Latency ↑', 'Low Loss ↑'],
+      datasets,
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 1200, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 12 } },
+        datalabels: { display: false },
+      },
+      scales: {
+        r: {
+          beginAtZero: true, max: 100,
+          grid: { color: '#334155' },
+          angleLines: { color: '#334155' },
+          pointLabels: { color: '#e2e8f0', font: { size: 12, weight: 'bold' } },
+          ticks: { display: false },
+        }
+      }
+    }
+  });
+}
+
+// ── Improvement Chart ──
+function createImprovementChart() {
+  const ctx = document.getElementById('improvementChart').getContext('2d');
+  charts.improvement = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: METHODS.map(m => m.name),
+      datasets: [
+        {
+          label: 'Throughput vs OSPF (%)',
+          data: METHODS.map(m => m.tPct),
+          backgroundColor: 'rgba(52,211,153,0.7)',
+          borderColor: '#34d399',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'Latency vs OSPF (%)',
+          data: METHODS.map(m => m.lPct),
+          backgroundColor: 'rgba(96,165,250,0.7)',
+          borderColor: '#60a5fa',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'Loss vs OSPF (%)',
+          data: METHODS.map(m => m.oPct),
+          backgroundColor: 'rgba(167,139,250,0.7)',
+          borderColor: '#a78bfa',
+          borderWidth: 1,
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 1200, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { position: 'top', labels: { color: '#94a3b8', font: { size: 11 } } },
+        datalabels: { display: false },
+      },
+      scales: {
+        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
+        x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── Ranking Table ──
+function buildRankingTable() {
+  const sorted = [...METHODS].sort((a, b) => b.throughput - a.throughput);
+  const medals = ['🥇', '🥈', '🥉'];
+  const tbody = document.getElementById('rankingBody');
+  tbody.innerHTML = sorted.map((m, i) => {
+    const catClass = `cat-${m.cat}`;
+    const isBest = i === 0;
+    return `<tr${isBest ? ' style="background:rgba(52,211,153,0.05)"' : ''}>
+      <td class="rank"><span class="medal">${i < 3 ? medals[i] : (i+1)}</span></td>
+      <td style="font-weight:${isBest ? '700' : '400'}; color:${isBest ? '#34d399' : '#e2e8f0'}">${m.name}</td>
+      <td><span class="cat-badge ${catClass}">${CAT_LABELS[m.cat]}</span></td>
+      <td class="${isBest ? 'best-cell' : ''}">${m.throughput.toFixed(2)}</td>
+      <td style="color:${m.tPct >= 0 ? '#34d399' : '#f87171'}">${m.tPct >= 0 ? '+' : ''}${m.tPct.toFixed(1)}%</td>
+      <td>${m.latency.toFixed(2)}</td>
+      <td style="color:${m.lPct <= 0 ? '#34d399' : '#f87171'}">${m.lPct >= 0 ? '+' : ''}${m.lPct.toFixed(1)}%</td>
+      <td class="${m.cat === 'proposed' ? 'best-cell' : ''}">${m.loss.toFixed(2)}</td>
+      <td style="color:${m.oPct <= 0 ? '#34d399' : '#f87171'}">${m.oPct >= 0 ? '+' : ''}${m.oPct.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Filter ──
+function filterMethods(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  // Update bar charts
+  ['throughput', 'loss', 'latency'].forEach(key => {
+    const c = charts[key];
+    c.data.datasets[0].backgroundColor = barColors(filter);
+    c.data.datasets[0].borderColor = barBorders(filter);
+    c.update('active');
+  });
+}
+
+// ── Init ──
+Chart.register(ChartDataLabels);
+window.addEventListener('DOMContentLoaded', () => {
+  createThroughputChart();
+  createLossChart();
+  createLatencyChart();
+  createRadarChart();
+  createImprovementChart();
+  buildRankingTable();
+});
+</script>
+</body>
+</html>
