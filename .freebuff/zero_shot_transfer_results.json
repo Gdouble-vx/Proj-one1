@@ -1,0 +1,51 @@
+{
+  "title": "Zero-Shot Transfer: NSFNET \u2192 Abilene",
+  "source_topology": "NSFNET (14 nodes, 21 links)",
+  "target_topology": "Abilene (12 nodes, 15 links)",
+  "nsfnet_model": "/home/ino/ppo_gnn_50k_best",
+  "training_steps": 5000,
+  "evaluation_seeds": 100,
+  "results": {
+    "OSPF": {
+      "throughput": 104.19659455712943,
+      "latency": 29.827030730137764,
+      "loss": 13.514100361261512
+    },
+    "Optimal (1/BW)": {
+      "throughput": 108.29900057594034,
+      "latency": 11.184163037890997,
+      "loss": 9.859639638197711
+    },
+    "Zero-Shot (NSFNET\u2192Abilene)": {
+      "throughput": 96.15799954635239,
+      "latency": 42.58701578958225,
+      "loss": 20.02578180969063,
+      "throughput_std": 16.84829218131423,
+      "latency_std": 31.611626458691184,
+      "loss_std": 10.631316778728143
+    },
+    "Fine-Tune 5k (NSFNET\u2192Abilene)": {
+      "throughput": 110.95894719057053,
+      "latency": 11.907513168462346,
+      "loss": 7.809534384660058,
+      "throughput_std": 16.28187309289294,
+      "latency_std": 8.107212922712966,
+      "loss_std": 8.352860429429104
+    },
+    "From Scratch 5k": {
+      "throughput": 110.95894719057053,
+      "latency": 11.907513168462346,
+      "loss": 7.809534384660058,
+      "throughput_std": 16.28187309289294,
+      "latency_std": 8.107212922712966,
+      "loss_std": 8.352860429429104
+    }
+  },
+  "transfer_efficiency": {
+    "zero_shot_improvement_pct": -8.038595010777044,
+    "finetune_improvement_pct": 6.762352633441097,
+    "scratch_improvement_pct": 6.762352633441097,
+    "finetune_vs_scratch": 100.0,
+    "time_speedup": 0.6336629944935954
+  }
+}

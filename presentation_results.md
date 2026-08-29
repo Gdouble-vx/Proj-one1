@@ -88,6 +88,25 @@
 
 ---
 
+## 🔄 Zero-Shot Transfer Test: NSFNET → Abilene
+
+**การทดลอง:** train PPO+GNN บน NSFNET 50k steps แล้วย้ายไป Abilene topology โดยไม่เทรนใหม่
+
+| Method | Topology | Throughput (Mbps) | vs OSPF | Latency (ms) | Loss (%) | Time |
+|---|---|---|---|---|---|---|
+| **OSPF** | Abilene | 104.20 | --- | 29.83 | 13.51 | - |
+| **Optimal (1/BW)** | Abilene | 108.30 | +3.94% | 11.18 | 9.86 | - |
+| **Zero-Shot** (NSFNET→Abilene) | Abilene | 96.16 | **-7.71%** | 42.59 | 20.03 | instant |
+| **Fine-Tune 5k** (NSFNET→Abilene) | Abilene | **110.96** | **+6.49%** | **11.91** | **7.81** | 31.6 min |
+| **From Scratch 5k** | Abilene | **110.96** | **+6.49%** | **11.91** | **7.81** | 20.0 min |
+
+**ข้อสังเกต:**
+- Zero-Shot แย่กว่า OSPF (-7.71%) — GNN encoder ไม่ transfer ข้าม topology ได้
+- Fine-Tune และ From Scratch ได้ผลเท่ากัน — model เรียนรู้ optimal routing บน Abilene ใน 5k steps
+- PPO+GNN บน Abilene ทำได้เท่า Optimal (1/BW) — เรียนรู้ inverse-BW weighting อัตโนมัติ
+
+---
+
 ## 📈 ผลการเทรน (Training Progress)
 
 | Step | Throughput (Mbps) | vs OSPF | Latency (ms) | Loss (%) |
