@@ -1,0 +1,72 @@
+{
+  "experiment": "Improved Transfer Learning — NSFNET → Abilene",
+  "date": "2026-08-29",
+  "improvements": [
+    "Dynamic edge index (topology-aware GNN)",
+    "Topology embedding (learnable)",
+    "Layer freezing (GNN encoder frozen, policy head trainable)",
+    "Padded observations (MAX_LINKS=21 for all topologies)"
+  ],
+  "nsfnet_source": {
+    "ospp": 98.1,
+    "optimal": 103.6,
+    "best_gnn_50k": 102.8,
+    "best_step": "4000-6000"
+  },
+  "abilene_target": {
+    "ospp": 105.2,
+    "ospp_latency_ms": 28.9,
+    "ospp_loss_pct": 13.3,
+    "optimal": 109.7,
+    "optimal_latency_ms": 10.8,
+    "optimal_loss_pct": 9.5
+  },
+  "transfer_results": {
+    "zero_shot": {
+      "throughput": 97.3,
+      "vs_ospp_pct": -7.5,
+      "latency_ms": 51.7,
+      "loss_pct": 19.5,
+      "training_time_s": 0
+    },
+    "finetune_gnn_frozen_5k": {
+      "throughput": 112.6,
+      "vs_ospp_pct": 7.0,
+      "latency_ms": 10.0,
+      "loss_pct": 7.2,
+      "training_time_s": 538,
+      "frozen_params": 20,
+      "trainable_params": 18
+    },
+    "finetune_all_layers_5k": {
+      "throughput": 112.4,
+      "vs_ospp_pct": 6.8,
+      "latency_ms": 10.0,
+      "loss_pct": 7.4,
+      "training_time_s": 587
+    },
+    "from_scratch_5k": {
+      "throughput": 104.8,
+      "vs_ospp_pct": -0.4,
+      "latency_ms": 12.6,
+      "loss_pct": 13.4,
+      "training_time_s": 589
+    }
+  },
+  "key_findings": [
+    "GNN Frozen Fine-tune ชนะทุกวิธี (112.6 Mbps, +7.0% vs OSPF)",
+    "ดีกว่า Optimal (1/BW) ที่ 109.7 Mbps ด้วยซ้ำ!",
+    "Zero-shot ยังล้มเหลว (-7.5%) ต้อง fine-tune เท่านั้น",
+    "From Scratch 5k steps ไม่พอ — ได้แค่ 104.8 Mbps (-0.4%)",
+    "Transfer Learning ช่วยให้ model เรียนรู้เร็วขึ้น + ผลลัพธ์ดีกว่า"
+  ],
+  "training_config": {
+    "source_topology": "NSFNET (14 nodes, 21 links)",
+    "target_topology": "Abilene (12 nodes, 15 links)",
+    "source_training": "50k steps, 101 min",
+    "finetune_steps": 5000,
+    "finetune_time": "9-10 min",
+    "algorithm": "PPO + GAT (3 layers, 4 heads)",
+    "hidden_dim": 128
+  }
+}

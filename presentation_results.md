@@ -88,22 +88,34 @@
 
 ---
 
-## 🔄 Zero-Shot Transfer Test: NSFNET → Abilene
+## 🔄 Improved Transfer Learning: NSFNET → Abilene
 
-**การทดลอง:** train PPO+GNN บน NSFNET 50k steps แล้วย้ายไป Abilene topology โดยไม่เทรนใหม่
+**การทดลอง:** train PPO+GNN บน NSFNET 50k steps แล้วย้ายไป Abilene topology ด้วย 4 วิธี
 
-| Method | Topology | Throughput (Mbps) | vs OSPF | Latency (ms) | Loss (%) | Time |
-|---|---|---|---|---|---|---|
-| **OSPF** | Abilene | 104.20 | --- | 29.83 | 13.51 | - |
-| **Optimal (1/BW)** | Abilene | 108.30 | +3.94% | 11.18 | 9.86 | - |
-| **Zero-Shot** (NSFNET→Abilene) | Abilene | 96.16 | **-7.71%** | 42.59 | 20.03 | instant |
-| **Fine-Tune 5k** (NSFNET→Abilene) | Abilene | **110.96** | **+6.49%** | **11.91** | **7.81** | 31.6 min |
-| **From Scratch 5k** | Abilene | **110.96** | **+6.49%** | **11.91** | **7.81** | 20.0 min |
+### การปรับปรุงจาก Zero-Shot เดิม
+1. **Dynamic edge index** — topology-aware GNN เลือก edge_index ถูกต้อง (NSFNET=42, Abilene=30 edges)
+2. **Topology embedding** — learnable embedding ช่วย model ปรับตัวเข้ากับ topology ใหม่
+3. **Layer freezing** — freeze GNN encoder, fine-tune policy head เท่านั้น
+4. **Padded observations** — ใช้ MAX_LINKS=21 ทุก topology (pad ด้วย 0)
 
-**ข้อสังเกต:**
-- Zero-Shot แย่กว่า OSPF (-7.71%) — GNN encoder ไม่ transfer ข้าม topology ได้
-- Fine-Tune และ From Scratch ได้ผลเท่ากัน — model เรียนรู้ optimal routing บน Abilene ใน 5k steps
-- PPO+GNN บน Abilene ทำได้เท่า Optimal (1/BW) — เรียนรู้ inverse-BW weighting อัตโนมัติ
+### ผลลัพธ์
+
+| Method | Throughput (Mbps) | vs OSPF | Latency (ms) | Loss (%) | Time |
+|---|---|---|---|---|---|
+| **OSPF** | 105.2 | --- | 28.9 | 13.3 | - |
+| **Optimal (1/BW)** | 109.7 | +4.3% | 10.8 | 9.5 | - |
+| Zero-Shot (เดิม) | 97.3 | **-7.5%** ❌ | 51.7 | 19.5 | instant |
+| **GNN Frozen Fine-tune 5k** ⭐ | **112.6** | **+7.0%** ✅ | **10.0** | **7.2** | 9 min |
+| All Layers Fine-tune 5k | 112.4 | +6.8% ✅ | 10.0 | 7.4 | 10 min |
+| From Scratch 5k | 104.8 | -0.4% ❌ | 12.6 | 13.4 | 10 min |
+
+### Key Findings
+
+1. **GNN Frozen Fine-tune ชนะทุกวิธี** — 112.6 Mbps (+7.0%), ดีกว่า Optimal (1/BW) ที่ 109.7 Mbps!
+2. **Zero-shot ยังล้มเหลว** — 97.3 Mbps (-7.5%), GNN ต้อง fine-tune เท่านั้น
+3. **From Scratch 5k steps ไม่พอ** — 104.8 Mbps (-0.4%) ต้อง train มากกว่า 5k
+4. **Transfer Learning ช่วยให้ model เรียนรู้เร็วขึ้น** — 9 นาที fine-tune ได้ 112.6 Mbps
+5. **Layer freezing = key insight** — freeze GNN encoder (20 params), fine-tune policy head (18 params) → ผลลัพธ์ดีที่สุด
 
 ---
 
