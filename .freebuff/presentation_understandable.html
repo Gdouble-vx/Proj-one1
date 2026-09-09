@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>นำเสนอโครงงาน — AI จัดเส้นทางเครือข่ายอัตโนมัติ (PPO+GNN)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=Inter:wght@400;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Prompt','Inter',sans-serif; background:#0b1220; color:#e2e8f0; }
+
+  .slide {
+    width:100vw; height:100vh; padding:50px 70px;
+    display:flex; flex-direction:column; justify-content:center;
+    position:relative; overflow:hidden;
+  }
+  .slide::before {
+    content:''; position:absolute; inset:0;
+    background:
+      radial-gradient(ellipse at 15% 20%, rgba(56,189,248,0.10), transparent 55%),
+      radial-gradient(ellipse at 85% 85%, rgba(34,197,94,0.07), transparent 55%);
+    pointer-events:none;
+  }
+  .slide-num { position:absolute; bottom:16px; right:28px; font-size:12px; color:#475569; font-family:'Inter'; }
+
+  /* ---------- TITLE ---------- */
+  .title-slide { text-align:center; }
+  .title-slide h1 { font-size:52px; font-weight:800; color:#f8fafc; line-height:1.25; }
+  .title-slide h1 .grad { background:linear-gradient(90deg,#38bdf8,#22c55e); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .title-slide .sub { font-size:20px; color:#94a3b8; margin-top:14px; font-weight:300; }
+  .title-slide .chips { margin-top:34px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .chip { padding:8px 18px; border-radius:999px; font-size:13px; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; background:rgba(56,189,248,0.08); }
+  .chip.green { border-color:rgba(34,197,94,0.35); color:#86efac; background:rgba(34,197,94,0.08); }
+
+  /* ---------- CONTENT ---------- */
+  h2 { font-size:34px; font-weight:700; color:#f8fafc; margin-bottom:6px; }
+  h2 .grad { background:linear-gradient(90deg,#38bdf8,#22c55e); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .lead { font-size:16px; color:#94a3b8; margin-bottom:28px; font-weight:300; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+
+  .card { background:rgba(30,41,59,0.75); border:1px solid #334155; border-radius:14px; padding:22px; }
+  .card h3 { font-size:15px; color:#38bdf8; margin-bottom:10px; }
+  .card p { font-size:13.5px; color:#cbd5e1; line-height:1.65; font-weight:300; }
+  .card.bad h3 { color:#f87171; }
+  .card.good h3 { color:#4ade80; }
+  .card.warn h3 { color:#fbbf24; }
+  .card .big { font-size:26px; font-weight:800; color:#f8fafc; }
+
+  .chart-box { background:rgba(30,41,59,0.75); border:1px solid #334155; border-radius:14px; padding:20px; }
+  .chart-box h3 { font-size:14px; color:#94a3b8; margin-bottom:14px; text-align:center; font-weight:400; }
+
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { background:#1e293b; color:#7dd3fc; padding:10px 12px; text-align:left; font-weight:600; font-size:12.5px; }
+  td { padding:9px 12px; border-bottom:1px solid #283548; color:#cbd5e1; }
+  tr.win td { background:rgba(34,197,94,0.12); color:#f8fafc; font-weight:600; }
+  tr.win td:first-child { border-left:3px solid #22c55e; }
+
+  .steps { display:flex; align-items:stretch; gap:10px; }
+  .step { flex:1; background:rgba(30,41,59,0.75); border:1px solid #334155; border-radius:12px; padding:18px; text-align:center; }
+  .step .num { font-size:22px; font-weight:800; color:#38bdf8; font-family:'Inter'; }
+  .step .t { font-size:13px; color:#f8fafc; margin-top:6px; font-weight:600; }
+  .step .d { font-size:11.5px; color:#94a3b8; margin-top:4px; font-weight:300; }
+  .arrow { align-self:center; color:#475569; font-size:22px; }
+
+  .kpi { display:flex; gap:20px; justify-content:center; margin-top:30px; }
+  .kpi .box { text-align:center; padding:18px 26px; border-radius:14px; background:rgba(30,41,59,0.75); border:1px solid #334155; min-width:170px; }
+  .kpi .box .v { font-size:30px; font-weight:800; color:#4ade80; font-family:'Inter'; }
+  .kpi .box .l { font-size:12px; color:#94a3b8; margin-top:4px; }
+  .kpi .box.red .v { color:#f87171; }
+  .kpi .box.blue .v { color:#38bdf8; }
+
+  .center { display:flex; justify-content:center; }
+  .canvas-lg { height:340px !important; }
+  .canvas-sm { height:260px !important; }
+  .chart-wrap { position:relative; width:100%; height:100%; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SLIDE 1 : TITLE ══════════════ -->
+<section class="slide title-slide">
+  <h1>AI ช่วยจัดเส้นทางเครือข่ายอัตโนมัติ<br><span class="grad">PPO + GNN บน SDN</span></h1>
+  <div class="sub">ระบบเรียนรู้ที่จะหลีกเลี่ยงเส้นทางคอขวด และเลือกเส้นทางที่ดีที่สุดแบบเรียลไทม์</div>
+  <div class="chips">
+    <span class="chip">🧠 PPO (Reinforcement Learning)</span>
+    <span class="chip">🔗 GNN (เข้าใจโครงข่ายทั้งระบบ)</span>
+    <span class="chip green">📈 Throughput +6.7% vs OSPF</span>
+    <span class="chip green">📉 Packet Loss -28.8%</span>
+  </div>
+  <div class="slide-num">1 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 2 : PROBLEM ══════════════ -->
+<section class="slide">
+  <h2>ปัญหา: <span class="grad">เส้นทางสั้นที่สุด ≠ เส้นทางที่ดีที่สุด</span></h2>
+  <div class="lead">โปรโตคอล OSPF แบบดั้งเดิม เลือกเส้นทางที่ "สั้นที่สุด" แต่ไม่ได้ดูว่าเส้นทางนั้น "แน่นแค่ไหน"</div>
+  <div class="grid3">
+    <div class="card bad">
+      <h3>🚗 อุปมาอุปไมย</h3>
+      <p>เหมือน GPS ที่แนะนำเส้นทางสั้นสุดเสมอ แต่ไม่รู้ว่ามีรถติดหนัก ถนนเส้นนั้นคับคั่ง → ทุกคนเบียดกันบนถนนสายเดียว</p>
+    </div>
+    <div class="card warn">
+      <h3>⚠️ ปัญหาของ OSPF</h3>
+      <p>เลือกทางสั้นสุดโดยไม่ดู<br>• ความจุลิงก์ (bandwidth)<br>• ความแออัด (congestion)<br>• สภาพเครือข่ายที่เปลี่ยนตลอดเวลา</p>
+    </div>
+    <div class="card good">
+      <h3>💡 แนวคิดของเรา</h3>
+      <p>AI มองเห็นเครือข่ายทั้งระบบ (ผ่าน GNN) แล้วเรียนรู้เองว่าลิงก์ไหนควรเลี่ยง ลิงก์ไหนควรใช้ → ปรับเส้นทางให้เข้ากับสถานการณ์</p>
+    </div>
+  </div>
+  <div class="slide-num">2 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 3 : HOW IT WORKS ══════════════ -->
+<section class="slide">
+  <h2>ทำงานอย่างไร? <span class="grad">วงจรเรียนรู้แบบปิด</span></h2>
+  <div class="lead">AI ไม่ได้ถูกโปรแกรมให้ "รู้อะไร" — แต่เรียนรู้จากการลองผิดลองถูก แล้วได้รางวัลเมื่อทำได้ดี</div>
+  <div class="steps">
+    <div class="step"><div class="num">1</div><div class="t">มองเห็นเครือข่าย</div><div class="d">GNN อ่านโครงสร้าง: 14 โหนด, 21 ลิงก์, ความจุแต่ละลิงก์</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">2</div><div class="t">ตัดสินใจ</div><div class="d">PPO เลือกปรับ "น้ำหนัก" ของแต่ละลิงก์ เพื่อเปลี่ยนเส้นทาง</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">3</div><div class="t">ทดสอบจริง</div><div class="d">ส่งข้อมูลผ่านเส้นทางใหม่ วัด Throughput / Latency / Loss</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">4</div><div class="t">ได้รางวัล</div><div class="d">เส้นทางดี = รางวัลสูง AI จำไว้ เส้นทางแย่ = ถูกลงโทษ</div></div>
+  </div>
+  <div class="kpi">
+    <div class="box blue"><div class="v">50,000</div><div class="l">ขั้นตอนการเรียนรู้ (steps)</div></div>
+    <div class="box blue"><div class="v">4 องค์ประกอบ</div><div class="l">ใน reward function</div></div>
+    <div class="box"><div class="v">0.013s</div><div class="l">เวลาตัดสินใจต่อ 1 รอบ</div></div>
+  </div>
+  <div class="slide-num">3 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 4 : GNN ARCHITECTURE ══════════════ -->
+<section class="slide">
+  <h2>ข้างในสมอง AI: <span class="grad">GNN เรียนรู้เครือข่ายอย่างไร</span></h2>
+  <div class="lead">เปรียบเหมือน "กลุ่มไลน์หมู่บ้าน" — ทุกสวิตช์เล่าข่าวให้เพื่อนบ้านฟัง 3 รอบ จนทุกจุดเห็นภาพรวมทั้งเครือข่าย แล้วส่งสรุปให้ PPO ตัดสินใจ</div>
+  <div class="card" style="padding:10px 14px">
+    <svg viewBox="0 0 1160 580" style="width:100%; height:auto;">
+      <!-- stage dividers -->
+      <line x1="335" y1="28" x2="335" y2="385" stroke="#334155" stroke-dasharray="5 5"/>
+      <line x1="705" y1="28" x2="705" y2="385" stroke="#334155" stroke-dasharray="5 5"/>
+
+      <!-- ══ Stage 1: input features ══ -->
+      <text x="25" y="46" fill="#7dd3fc" font-size="14" font-weight="700">① มองสถานะเครือข่าย</text>
+      <text x="25" y="64" fill="#94a3b8" font-size="10">ตัวเลข = % การใช้งาน · เส้นหนา = ความจุสูง</text>
+      <g stroke-linecap="round">
+        <line x1="120" y1="110" x2="230" y2="130" stroke="#22c55e" stroke-width="4" opacity="0.85"/>
+        <line x1="230" y1="130" x2="265" y2="225" stroke="#ef4444" stroke-width="2" opacity="0.85"/>
+        <line x1="265" y1="225" x2="185" y2="300" stroke="#f59e0b" stroke-width="3" opacity="0.85"/>
+        <line x1="185" y1="300" x2="75" y2="270" stroke="#22c55e" stroke-width="5" opacity="0.85"/>
+        <line x1="75" y1="270" x2="62" y2="165" stroke="#ef4444" stroke-width="2" opacity="0.85"/>
+        <line x1="62" y1="165" x2="120" y2="110" stroke="#22c55e" stroke-width="4" opacity="0.85"/>
+        <line x1="230" y1="130" x2="185" y2="300" stroke="#22c55e" stroke-width="6" opacity="0.9"/>
+      </g>
+      <g>
+        <circle cx="120" cy="110" r="20" fill="#1e293b" stroke="#7dd3fc" stroke-width="2"/>
+        <circle cx="230" cy="130" r="20" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+        <circle cx="265" cy="225" r="20" fill="#1e293b" stroke="#f87171" stroke-width="2.5"/>
+        <circle cx="185" cy="300" r="20" fill="#1e293b" stroke="#7dd3fc" stroke-width="2"/>
+        <circle cx="75" cy="270" r="20" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+        <circle cx="62" cy="165" r="20" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+      </g>
+      <g fill="#f8fafc" font-size="10" font-weight="700" text-anchor="middle" font-family="Inter">
+        <text x="120" y="114">35%</text><text x="230" y="134">62%</text><text x="265" y="229">88%</text>
+        <text x="185" y="304">41%</text><text x="75" y="274">25%</text><text x="62" y="169">30%</text>
+      </g>
+      <text x="165" y="348" fill="#f87171" font-size="10.5" text-anchor="middle">🔴 สีแดง = จุดที่แน่น (ใกล้คอขวด)</text>
+      <text x="165" y="366" fill="#94a3b8" font-size="10" text-anchor="middle">แต่ละจุดส่งตัวเลข 1 ค่า · แต่ละเส้นส่ง 3 ค่า (ใช้งาน/น้ำหนัก/ความจุ)</text>
+
+      <!-- ══ Stage 2: message passing ══ -->
+      <text x="360" y="46" fill="#7dd3fc" font-size="14" font-weight="700">② ส่งข่าวหาเพื่อนบ้าน (Message Passing)</text>
+      <g stroke="#38bdf8" stroke-width="3" stroke-linecap="round" opacity="0.9" style="filter:drop-shadow(0 0 5px rgba(56,189,248,0.75))">
+        <line x1="470" y1="110" x2="580" y2="130"/>
+        <line x1="580" y1="130" x2="615" y2="225"/>
+        <line x1="615" y1="225" x2="535" y2="300"/>
+        <line x1="535" y1="300" x2="425" y2="270"/>
+        <line x1="425" y1="270" x2="412" y2="165"/>
+        <line x1="412" y1="165" x2="470" y2="110"/>
+        <line x1="580" y1="130" x2="535" y2="300" stroke="#4ade80"/>
+      </g>
+      <g fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.4" stroke-dasharray="3 3">
+        <circle cx="470" cy="110" r="27"/><circle cx="580" cy="130" r="27"/><circle cx="615" cy="225" r="27"/>
+        <circle cx="535" cy="300" r="27"/><circle cx="425" cy="270" r="27"/><circle cx="412" cy="165" r="27"/>
+      </g>
+      <g fill="#1e293b" stroke="#7dd3fc" stroke-width="2">
+        <circle cx="470" cy="110" r="20"/><circle cx="580" cy="130" r="20"/><circle cx="615" cy="225" r="20"/>
+        <circle cx="535" cy="300" r="20"/><circle cx="425" cy="270" r="20"/><circle cx="412" cy="165" r="20"/>
+      </g>
+      <g fill="#e2e8f0" font-size="9.5" font-weight="700" text-anchor="middle" font-family="Inter">
+        <text x="470" y="114">📨</text><text x="580" y="134">📨</text><text x="615" y="229">📨</text>
+        <text x="535" y="304">📨</text><text x="425" y="274">📨</text><text x="412" y="169">📨</text>
+      </g>
+      <g font-family="Inter" text-anchor="middle">
+        <rect x="368" y="322" width="106" height="24" rx="12" fill="rgba(56,189,248,0.10)" stroke="#38bdf8"/>
+        <text x="421" y="338" fill="#7dd3fc" font-size="9.5">รอบ 1: รู้จักเพื่อนบ้าน</text>
+        <rect x="482" y="322" width="106" height="24" rx="12" fill="rgba(56,189,248,0.20)" stroke="#38bdf8"/>
+        <text x="535" y="338" fill="#7dd3fc" font-size="9.5">รอบ 2: รู้ข่าวข้าง ๆ</text>
+        <rect x="596" y="322" width="106" height="24" rx="12" fill="rgba(56,189,248,0.32)" stroke="#38bdf8"/>
+        <text x="649" y="338" fill="#7dd3fc" font-size="9.5">รอบ 3: เห็นทั้งเครือข่าย</text>
+      </g>
+      <text x="360" y="372" fill="#fbbf24" font-size="10.5">🎯 GAT ฟังเพื่อนบ้านไม่เท่ากัน — ตัวที่สำคัญ (ใกล้คอขวด) ถูกฟังดังกว่า</text>
+
+      <!-- ══ Stage 3: pooling + PPO ══ -->
+      <text x="730" y="46" fill="#7dd3fc" font-size="14" font-weight="700">③ สรุปทั้งเครือข่าย + ตัดสินใจ</text>
+      <g>
+        <circle cx="780" cy="140" r="8" fill="#f87171"/><circle cx="818" cy="118" r="8" fill="#fbbf24"/>
+        <circle cx="856" cy="150" r="8" fill="#38bdf8"/><circle cx="782" cy="212" r="8" fill="#4ade80"/>
+        <circle cx="830" cy="242" r="8" fill="#fbbf24"/><circle cx="862" cy="220" r="8" fill="#38bdf8"/>
+      </g>
+      <g stroke="#475569" stroke-width="1.5">
+        <line x1="786" y1="145" x2="900" y2="182"/><line x1="824" y1="122" x2="900" y2="180"/>
+        <line x1="862" y1="152" x2="900" y2="182"/><line x1="788" y1="208" x2="900" y2="190"/>
+        <line x1="836" y1="238" x2="900" y2="196"/><line x1="866" y1="216" x2="900" y2="192"/>
+      </g>
+      <text x="812" y="282" fill="#94a3b8" font-size="9.5" text-anchor="middle">สถานะจากทุกสวิตช์ (14 โหนด)</text>
+      <rect x="902" y="158" width="136" height="58" rx="10" fill="rgba(30,41,59,0.9)" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="970" y="182" fill="#e2e8f0" font-size="11" font-weight="600" text-anchor="middle">รวมทั้งเครือข่าย</text>
+      <text x="970" y="200" fill="#94a3b8" font-size="10" text-anchor="middle">(Pooling) → 128 ตัวเลข</text>
+      <line x1="1038" y1="187" x2="1064" y2="187" stroke="#4ade80" stroke-width="2.5"/>
+      <polygon points="1064,181 1074,187 1064,193" fill="#4ade80"/>
+      <rect x="1076" y="156" width="96" height="62" rx="10" fill="rgba(34,197,94,0.10)" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="1124" y="185" fill="#86efac" font-size="15" font-weight="800" text-anchor="middle" font-family="Inter">PPO</text>
+      <text x="1124" y="203" fill="#94a3b8" font-size="10" text-anchor="middle">ตัดสินใจ</text>
+      <line x1="1124" y1="218" x2="1124" y2="244" stroke="#22c55e" stroke-width="2.5"/>
+      <polygon points="1118,244 1124,254 1130,244" fill="#22c55e"/>
+      <rect x="1000" y="256" width="200" height="42" rx="21" fill="rgba(34,197,94,0.12)" stroke="#22c55e"/>
+      <text x="1100" y="273" fill="#86efac" font-size="10.5" font-weight="600" text-anchor="middle">ปรับน้ำหนักลิงก์ทั้ง 21 เส้น</text>
+      <text x="1100" y="289" fill="#86efac" font-size="10.5" text-anchor="middle">→ เครือข่ายเปลี่ยนเส้นทาง</text>
+    </svg>
+  </div>
+  <div class="kpi" style="margin-top:16px">
+    <div class="box blue"><div class="v">3 ชั้น</div><div class="l">GAT — ส่งข่าวระหว่างเพื่อนบ้าน 3 รอบ</div></div>
+    <div class="box blue"><div class="v">4 heads</div><div class="l">attention ต่อชั้น — ฟังหลายมุมพร้อมกัน</div></div>
+    <div class="box"><div class="v">128 มิติ</div><div class="l">สรุปทั้งเครือข่ายเป็นเวกเตอร์เดียว ก่อนส่งให้ PPO</div></div>
+  </div>
+  <div class="slide-num">4 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 5 : AI DECISION PROCESS ══════════════ -->
+<section class="slide">
+  <h2>AI เลือกเส้นทางยังไง? <span class="grad">ใช้อะไรตัดสินใจ</span></h2>
+  <div class="lead">เปรียบเหมือน <b style="color:#7dd3fc">ตำรวจจราจร</b> — มองการจราจร + ความกว้างถนน แล้วปรับป้ายให้รถวิ่งไปถนนกว้าง เลี่ยงถนนแคบ</div>
+  <div class="card" style="padding:14px">
+    <svg viewBox="0 0 1180 210" style="width:100%; height:auto;">
+      <defs>
+        <marker id="ar2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#38bdf8"/></marker>
+      </defs>
+      <!-- Box 1: inputs -->
+      <rect x="10" y="30" width="250" height="120" rx="14" fill="rgba(56,189,248,0.10)" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="135" y="62" fill="#7dd3fc" font-size="15" font-weight="700" text-anchor="middle">👁 ข้อมูลเข้า (77 ตัวเลข)</text>
+      <text x="135" y="92" fill="#cbd5e1" font-size="11.5" text-anchor="middle">14 สวิตช์ → % การใช้งานแต่ละจุด</text>
+      <text x="135" y="112" fill="#cbd5e1" font-size="11.5" text-anchor="middle">21 ลิงก์ × 3 → ใช้งาน / น้ำหนัก / ความจุ</text>
+      <text x="135" y="134" fill="#64748b" font-size="10.5" text-anchor="middle">สถานะเครือข่ายเรียลไทม์ทั้งหมด</text>
+      <line x1="262" y1="90" x2="300" y2="90" stroke="#38bdf8" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- Box 2: GNN -->
+      <rect x="303" y="30" width="250" height="120" rx="14" fill="rgba(168,85,247,0.10)" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="428" y="62" fill="#d8b4fe" font-size="15" font-weight="700" text-anchor="middle">🧠 GNN คิด 3 รอบ</text>
+      <text x="428" y="92" fill="#cbd5e1" font-size="11.5" text-anchor="middle">สวิตช์ส่งข่าวหาเพื่อนบ้าน 3 รอบ</text>
+      <text x="428" y="112" fill="#cbd5e1" font-size="11.5" text-anchor="middle">ลิงก์ไหนแน่น → สัญญาณเตือนลุกลาม</text>
+      <text x="428" y="134" fill="#64748b" font-size="10.5" text-anchor="middle">เห็นภาพทั้งเครือข่ายพร้อมกัน (ไม่ใช่ทีละจุด)</text>
+      <line x1="555" y1="90" x2="593" y2="90" stroke="#38bdf8" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- Box 3: PPO -->
+      <rect x="596" y="30" width="250" height="120" rx="14" fill="rgba(34,197,94,0.10)" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="721" y="62" fill="#86efac" font-size="15" font-weight="700" text-anchor="middle">🎯 PPO ตัดสินใจ</text>
+      <text x="721" y="92" fill="#cbd5e1" font-size="11.5" text-anchor="middle">สรุปทั้งเครือข่ายเป็น 128 ตัวเลข</text>
+      <text x="721" y="112" fill="#cbd5e1" font-size="11.5" text-anchor="middle">เลือกน้ำหนักที่ให้ผลลัพธ์ดีที่สุด</text>
+      <text x="721" y="134" fill="#64748b" font-size="10.5" text-anchor="middle">จากประสบการณ์เทรน 50,000 รอบ</text>
+      <line x1="848" y1="90" x2="886" y2="90" stroke="#38bdf8" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- Box 4: output -->
+      <rect x="889" y="30" width="280" height="120" rx="14" fill="rgba(245,158,11,0.10)" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="1029" y="62" fill="#fcd34d" font-size="15" font-weight="700" text-anchor="middle">⚖️ ปรับน้ำหนัก 21 ลิงก์ (1–100)</text>
+      <text x="1029" y="92" fill="#cbd5e1" font-size="11.5" text-anchor="middle">ONOS คำนวณเส้นทางใหม่ให้อัตโนมัติ</text>
+      <text x="1029" y="112" fill="#cbd5e1" font-size="11.5" text-anchor="middle">น้ำหนักสูง = ราคาแพง = รถเลี่ยง</text>
+      <text x="1029" y="134" fill="#64748b" font-size="10.5" text-anchor="middle">ผลลัพธ์: แพ็กเก็ตไหลไปถนนกว้าง</text>
+      <!-- cycle back -->
+      <path d="M 1029 150 L 1029 180 L 135 180 L 135 152" fill="none" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ar2)"/>
+      <text x="582" y="198" fill="#64748b" font-size="11" text-anchor="middle">วนซ้ำทุก ~10 วินาที: มอง → คิด → ปรับ → มองใหม่ (0.013 วินาทีต่อการตัดสินใจ)</text>
+    </svg>
+  </div>
+  <div class="grid2" style="grid-template-columns:1fr 1fr; margin-top:14px; align-items:start">
+    <div class="card">
+      <h3>🏅 อะไรทำให้ AI รู้ว่า "ถูก" (รางวัล)</h3>
+      <p style="font-size:12.5px; margin:6px 0">➕ ส่งข้อมูลได้เยอะ (throughput)</p>
+      <p style="font-size:12.5px; margin:6px 0">➕ ลิงก์แคบยังว่างอยู่ (เก็บไว้ใช้ฉุกเฉิน)</p>
+      <p style="font-size:12.5px; margin:6px 0">➕ โหลดกระจายสม่ำเสมอทั้งเครือข่าย</p>
+      <h3 style="margin-top:12px">⛔ อะไรทำให้ AI รู้ว่า "ผิด" (โทษ)</h3>
+      <p style="font-size:12.5px; margin:6px 0; color:#f87171">➖ แพ็กเก็ตหาย — หนักสุด (โทษ ×100)</p>
+      <p style="font-size:12.5px; margin:6px 0; color:#f87171">➖ ลิงก์แคบล้น &gt; 80% (โทษ ×50)</p>
+      <p style="font-size:12.5px; margin:6px 0; color:#f87171">➖ รถติดกระจุกอยู่บางเส้น (โหลดไม่สมดุล)</p>
+    </div>
+    <div class="card">
+      <h3>🔍 หลักฐาน: น้ำหนักที่ AI ตั้งจริง (จากโมเดลที่เทรน 50k)</h3>
+      <p style="font-size:12.5px; margin:8px 0"><span style="color:#22c55e">🟢</span> s1–s2 (กว้าง 150 Mbps) → น้ำหนัก <b style="color:#86efac">1.0</b> = ถูกที่สุด เลือกใช้</p>
+      <p style="font-size:12.5px; margin:8px 0"><span style="color:#22c55e">🟢</span> s4–s6 (กว้าง 200 Mbps) → น้ำหนัก <b style="color:#86efac">1.0</b> = ทางด่วน</p>
+      <p style="font-size:12.5px; margin:8px 0"><span style="color:#f87171">🔴</span> s3–s4 (แคบ 15 Mbps) → น้ำหนัก <b style="color:#f87171">9.1</b> = แพง เลี่ยง</p>
+      <p style="font-size:12.5px; margin:8px 0"><span style="color:#f87171">🔴</span> s12–s13 (80 Mbps) → น้ำหนัก <b style="color:#f87171">8.6</b> = ระวัง</p>
+      <p style="font-size:12px; margin:10px 0; padding:8px 10px; border-radius:8px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); color:#7dd3fc">AI ค้นพบกฎ "ยิ่งถนนแคบ ยิ่งตั้งราคาแพง" เอง โดยไม่มีใครสอน — เหมือน Dijkstra ที่เรียนรู้จากประสบการณ์</p>
+    </div>
+  </div>
+  <div class="slide-num">5 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 6 : TOPOLOGY ══════════════ -->
+<section class="slide">
+  <h2>ทดลองบน <span class="grad">Topology จริงจากงานวิจัย</span></h2>
+  <div class="lead">NSFNET — 14 สวิตช์ 21 ลิงก์ ความจุไม่เท่ากัน<br><span style="color:#f87171">🔴 เส้นแดง = คอขวด (15–20 Mbps)</span> · <span style="color:#22c55e">🟢 เส้นเขียว = ทางกว้าง (100–200 Mbps)</span> · <span style="color:#f59e0b">🟡 ส้ม = กลาง</span> — เอาเมาส์ชี้ที่สวิตช์เพื่อดูลิงก์</div>
+  <div class="grid2" style="grid-template-columns:1.2fr 0.8fr; align-items:start">
+    <div class="card" style="padding:12px">
+      <svg viewBox="0 0 1160 580" style="width:100%; height:auto;">
+        <!-- links -->
+        <line id="e-1-2"  class="edge" data-ids="1-2"  data-w="4.9" x1="150" y1="110" x2="275" y2="250" stroke="#22c55e" stroke-width="4.9" stroke-linecap="round" opacity="0.85"><title>s1–s2 · 150 Mbps · ทางกว้าง</title></line>
+        <line id="e-1-3"  class="edge" data-ids="1-3"  data-w="3.4" x1="150" y1="110" x2="400" y2="110"  stroke="#f59e0b" stroke-width="3.4" stroke-linecap="round" opacity="0.85"><title>s1–s3 · 80 Mbps · กลาง</title></line>
+        <line id="e-1-8"  class="edge" data-ids="1-8"  data-w="3.8" x1="150" y1="110" x2="150" y2="400" stroke="#22c55e" stroke-width="3.8" stroke-linecap="round" opacity="0.85"><title>s1–s8 · 100 Mbps · ทางกว้าง</title></line>
+        <line id="e-2-3"  class="edge" data-ids="2-3"  data-w="2.0" x1="275" y1="250" x2="400" y2="110"  stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s2–s3 · 20 Mbps · คอขวด</title></line>
+        <line id="e-2-7"  class="edge" data-ids="2-7"  data-w="2.0" x1="275" y1="250" x2="275" y2="400" stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s2–s7 · 15 Mbps · คอขวด</title></line>
+        <line id="e-3-4"  class="edge" data-ids="3-4"  data-w="2.0" x1="400" y1="110" x2="650" y2="110"  stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s3–s4 · 15 Mbps · คอขวด</title></line>
+        <line id="e-4-5"  class="edge" data-ids="4-5"  data-w="3.8" x1="650" y1="110" x2="775" y2="250" stroke="#22c55e" stroke-width="3.8" stroke-linecap="round" opacity="0.85"><title>s4–s5 · 100 Mbps · ทางกว้าง</title></line>
+        <line id="e-4-6"  class="edge" data-ids="4-6"  data-w="6.0" x1="650" y1="110" x2="1040" y2="110" stroke="#22c55e" stroke-width="6.0" stroke-linecap="round" opacity="0.9"><title>s4–s6 · 200 Mbps · เร็วที่สุด</title></line>
+        <line id="e-5-6"  class="edge" data-ids="5-6"  data-w="4.9" x1="775" y1="250" x2="1040" y2="110" stroke="#22c55e" stroke-width="4.9" stroke-linecap="round" opacity="0.85"><title>s5–s6 · 150 Mbps · ทางกว้าง</title></line>
+        <line id="e-5-7"  class="edge" data-ids="5-7"  data-w="4.9" x1="775" y1="250" x2="275" y2="400" stroke="#22c55e" stroke-width="4.9" stroke-linecap="round" opacity="0.85"><title>s5–s7 · 150 Mbps · ทางกว้าง</title></line>
+        <line id="e-6-13" class="edge" data-ids="6-13" data-w="2.0" x1="1040" y1="110" x2="1040" y2="560" stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s6–s13 · 15 Mbps · คอขวด</title></line>
+        <line id="e-6-14" class="edge" data-ids="6-14" data-w="3.4" x1="1040" y1="110" x2="910" y2="250" stroke="#f59e0b" stroke-width="3.4" stroke-linecap="round" opacity="0.85"><title>s6–s14 · 80 Mbps · กลาง</title></line>
+        <line id="e-7-8"  class="edge" data-ids="7-8"  data-w="3.8" x1="275" y1="400" x2="150" y2="400" stroke="#22c55e" stroke-width="3.8" stroke-linecap="round" opacity="0.85"><title>s7–s8 · 100 Mbps · ทางกว้าง</title></line>
+        <line id="e-8-9"  class="edge" data-ids="8-9"  data-w="2.0" x1="150" y1="400" x2="400" y2="480" stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s8–s9 · 20 Mbps · คอขวด</title></line>
+        <line id="e-9-10" class="edge" data-ids="9-10" data-w="4.9" x1="400" y1="480" x2="650" y2="420" stroke="#22c55e" stroke-width="4.9" stroke-linecap="round" opacity="0.85"><title>s9–s10 · 150 Mbps · ทางกว้าง</title></line>
+        <line id="e-9-12" class="edge" data-ids="9-12" data-w="6.0" x1="400" y1="480" x2="600" y2="540" stroke="#22c55e" stroke-width="6.0" stroke-linecap="round" opacity="0.9"><title>s9–s12 · 200 Mbps · เร็วที่สุด</title></line>
+        <line id="e-10-11" class="edge" data-ids="10-11" data-w="3.8" x1="650" y1="420" x2="880" y2="470" stroke="#22c55e" stroke-width="3.8" stroke-linecap="round" opacity="0.85"><title>s10–s11 · 100 Mbps · ทางกว้าง</title></line>
+        <line id="e-10-13" class="edge" data-ids="10-13" data-w="3.8" x1="650" y1="420" x2="1040" y2="560" stroke="#22c55e" stroke-width="3.8" stroke-linecap="round" opacity="0.85"><title>s10–s13 · 100 Mbps · ทางกว้าง</title></line>
+        <line id="e-11-12" class="edge" data-ids="11-12" data-w="6.0" x1="880" y1="470" x2="600" y2="540" stroke="#22c55e" stroke-width="6.0" stroke-linecap="round" opacity="0.9"><title>s11–s12 · 200 Mbps · เร็วที่สุด</title></line>
+        <line id="e-11-14" class="edge" data-ids="11-14" data-w="2.0" x1="880" y1="470" x2="910" y2="250" stroke="#ef4444" stroke-width="2.0" stroke-linecap="round" opacity="0.85"><title>s11–s14 · 15 Mbps · คอขวด</title></line>
+        <line id="e-12-13" class="edge" data-ids="12-13" data-w="3.4" x1="600" y1="540" x2="1040" y2="560" stroke="#f59e0b" stroke-width="3.4" stroke-linecap="round" opacity="0.85"><title>s12–s13 · 80 Mbps · กลาง</title></line>
+
+        <!-- hosts -->
+        <g fill="rgba(14,165,233,0.35)" stroke="#38bdf8" stroke-width="1">
+          <rect x="96" y="66" width="24" height="16" rx="4"/><rect x="219" y="242" width="24" height="16" rx="4"/><rect x="404" y="62" width="24" height="16" rx="4"/><rect x="654" y="62" width="24" height="16" rx="4"/>
+          <rect x="779" y="202" width="24" height="16" rx="4"/><rect x="1052" y="66" width="24" height="16" rx="4"/><rect x="219" y="432" width="24" height="16" rx="4"/><rect x="96" y="392" width="24" height="16" rx="4"/>
+          <rect x="356" y="512" width="24" height="16" rx="4"/><rect x="654" y="372" width="24" height="16" rx="4"/><rect x="836" y="436" width="24" height="16" rx="4"/><rect x="552" y="556" width="24" height="16" rx="4"/>
+          <rect x="1058" y="518" width="24" height="16" rx="4"/><rect x="916" y="196" width="24" height="16" rx="4"/>
+        </g>
+        <g fill="#7dd3fc" font-size="10" font-family="Inter" text-anchor="middle">
+          <text x="108" y="78">h1</text><text x="231" y="254">h2</text><text x="416" y="74">h3</text><text x="666" y="74">h4</text>
+          <text x="791" y="214">h5</text><text x="1064" y="78">h6</text><text x="231" y="444">h7</text><text x="108" y="404">h8</text>
+          <text x="368" y="524">h9</text><text x="666" y="384">h10</text><text x="848" y="448">h11</text><text x="564" y="568">h12</text>
+          <text x="1070" y="530">h13</text><text x="928" y="208">h14</text>
+        </g>
+
+        <!-- switches -->
+        <g>
+          <circle cx="150" cy="110" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(1)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="275" cy="250" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(2)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="400" cy="110"  r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(3)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="650" cy="110"  r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(4)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="775" cy="250" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(5)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="1040" cy="110" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(6)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="275" cy="400" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(7)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="150" cy="400" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(8)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="400" cy="480" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(9)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="650" cy="420" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(10)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="880" cy="470" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(11)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="600" cy="540" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(12)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="1040" cy="560" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(13)" onmouseout="unhighlight()" style="cursor:pointer"/>
+          <circle cx="910" cy="250" r="17" fill="#1e293b" stroke="#7dd3fc" stroke-width="2.5" onmouseover="highlightEdges(14)" onmouseout="unhighlight()" style="cursor:pointer"/>
+        </g>
+        <g fill="#f8fafc" font-size="13" font-weight="700" font-family="Inter" text-anchor="middle">
+          <text x="150" y="115">s1</text><text x="275" y="255">s2</text><text x="400" y="115">s3</text><text x="650" y="115">s4</text>
+          <text x="775" y="255">s5</text><text x="1040" y="115">s6</text><text x="275" y="405">s7</text><text x="150" y="405">s8</text>
+          <text x="400" y="485">s9</text><text x="650" y="425">s10</text><text x="880" y="475">s11</text><text x="600" y="545">s12</text>
+          <text x="1040" y="565">s13</text><text x="910" y="255">s14</text>
+        </g>
+
+        <!-- legend -->
+        <g font-size="11" font-family="Inter">
+          <rect x="16" y="16" width="300" height="66" rx="8" fill="rgba(15,23,42,0.75)" stroke="#334155"/>
+          <line x1="32" y1="34" x2="62" y2="34" stroke="#ef4444" stroke-width="3"/><text x="70" y="38" fill="#cbd5e1">15–20 Mbps (คอขวด)</text>
+          <line x1="32" y1="54" x2="62" y2="54" stroke="#f59e0b" stroke-width="3"/><text x="70" y="58" fill="#cbd5e1">80 Mbps (กลาง)</text>
+          <line x1="32" y1="74" x2="62" y2="74" stroke="#22c55e" stroke-width="5"/><text x="70" y="78" fill="#cbd5e1">100–200 Mbps (ทางกว้าง)</text>
+        </g>
+      </svg>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <h3>🏗️ NSFNET (14 สวิตช์ / 21 ลิงก์)</h3>
+        <p>
+          • แต่ละสวิตช์มีโฮสต์ 1 ตัว (h1–h14) ไว้ส่งข้อมูลจริง<br>
+          • ความจุลิงก์ไม่เท่ากัน 15–200 Mbps — เลียนแบบโลกจริง<br>
+          • เส้นแดง (แคบ) = จุดคอขวด — OSPF เลือกทางสั้นสุดจึงติดแดงเสมอ<br>
+          • AI เรียนรู้ที่จะเลี่ยงแดง ไปใช้ทางเขียว (กว้าง) แทน
+        </p>
+      </div>
+      <div class="card">
+        <h3>📚 อ้างอิง Topology</h3>
+        <p>
+          • NSFNET: Farrington & Helios, 1992<br>
+          • RouteNet: Rusek et al., IEEE JSAC 2020<br>
+          • DRL+GNN Routing: Almasan et al., arXiv 2022<br>
+          • PPO+GNN: Wu & Zhu, JNCA 2025
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="box blue"><div class="v">14</div><div class="l">สวิตช์ (โหนด)</div></div>
+    <div class="box blue"><div class="v">21</div><div class="l">ลิงก์</div></div>
+    <div class="box blue"><div class="v">15–200 Mbps</div><div class="l">ความจุไม่เท่ากัน</div></div>
+  </div>
+  <div class="slide-num">6 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 5 : COMPARISON HEADLINE ══════════════ -->
+<section class="slide">
+  <h2>ผลลัพธ์หลัก: <span class="grad">AI ดีกว่าวิธีดั้งเดิมทุกด้าน</span></h2>
+  <div class="lead">เปรียบเทียบ 11 วิธี บน simulator เดียวกัน topology เดียวกัน 100 ชุดทดสอบเดียวกัน — มาตรฐานเดียวกันทั้งหมด</div>
+  <div class="kpi">
+    <div class="box"><div class="v">+6.7%</div><div class="l">Throughput สูงขึ้น</div></div>
+    <div class="box red"><div class="v">-20.2%</div><div class="l">Latency ลดลง</div></div>
+    <div class="box red"><div class="v">-28.8%</div><div class="l">Packet Loss ลดลง</div></div>
+  </div>
+  <div class="grid3" style="margin-top:30px">
+    <div class="card good"><h3>🥇 ผ่านสูงสุด (Throughput)</h3><p>PPO+GNN ส่งข้อมูลได้ 103.7 Mbps มากที่สุดใน 11 วิธี</p></div>
+    <div class="card good"><h3>🥇 สูญเสียน้อยสุด (Loss)</h3><p>แพ็กเก็ตตกหล่นแค่ 13.2% — ต่ำที่สุด ต่ำกว่า OSPF เกือบ 1 ใน 3</p></div>
+    <div class="card"><h3>🥈 หน่วงต่ำ (Latency)</h3><p>24.7ms เร็วขึ้น 20% จาก OSPF 30.9ms</p></div>
+  </div>
+  <div class="slide-num">7 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 6 : THROUGHPUT CHART ══════════════ -->
+<section class="slide">
+  <h2>กราฟที่ 1: <span class="grad">Throughput — ส่งข้อมูลได้มากแค่ไหน</span></h2>
+  <div class="lead">ยิ่งสูงยิ่งดี — PPO+GNN (สีเขียว) ชนะทุกวิธี</div>
+  <div class="chart-box"><div class="chart-wrap"><canvas id="chThroughput" class="canvas-lg"></canvas></div></div>
+  <div class="slide-num">8 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 7 : LOSS CHART ══════════════ -->
+<section class="slide">
+  <h2>กราฟที่ 2: <span class="grad">Packet Loss — ข้อมูลหายไปแค่ไหน</span></h2>
+  <div class="lead">ยิ่งต่ำยิ่งดี — PPO+GNN สูญเสียแพ็กเก็ตน้อยที่สุด (13.2% เทียบกับ OSPF 18.5%)</div>
+  <div class="chart-box"><div class="chart-wrap"><canvas id="chLoss" class="canvas-lg"></canvas></div></div>
+  <div class="slide-num">9 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 8 : LATENCY CHART ══════════════ -->
+<section class="slide">
+  <h2>กราฟที่ 3: <span class="grad">Latency — ข้อมูลเดินทางช้าแค่ไหน</span></h2>
+  <div class="lead">ยิ่งต่ำยิ่งดี (หน่วย ms) — PPO+GNN หน่วง 24.7ms จาก OSPF 30.9ms</div>
+  <div class="chart-box"><div class="chart-wrap"><canvas id="chLatency" class="canvas-lg"></canvas></div></div>
+  <div class="slide-num">10 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 9 : FULL TABLE ══════════════ -->
+<section class="slide">
+  <h2>ตารางเปรียบเทียบ <span class="grad">11 วิธี มาตรฐานเดียวกัน</span></h2>
+  <div class="lead">ทุกวิธีถูกทดสอบด้วยข้อมูลชุดเดียวกัน (seeds 0-99) — เทียบแฟร์ 100%</div>
+  <div class="card" style="padding:10px">
+  <table>
+    <tr><th>วิธี</th><th>ประเภท</th><th>Throughput (Mbps)</th><th>vs OSPF</th><th>Latency (ms)</th><th>Loss (%)</th></tr>
+    <tr><td>OSPF (hop-count)</td><td>ดั้งเดิม</td><td>97.2</td><td>—</td><td>30.9</td><td>18.5</td></tr>
+    <tr><td>SP (Shortest Path)</td><td>ดั้งเดิม</td><td>97.2</td><td>+0.0%</td><td>30.9</td><td>18.5</td></tr>
+    <tr><td>ECMP</td><td>ดั้งเดิม</td><td>98.0</td><td>+0.8%</td><td>20.6</td><td>17.9</td></tr>
+    <tr><td>Dijkstra (inv-BW)</td><td>ดั้งเดิม</td><td>103.1</td><td>+6.1%</td><td>28.7</td><td>13.7</td></tr>
+    <tr><td>Load Balance</td><td>ดั้งเดิม</td><td>87.1</td><td>-10.4%</td><td>7.1</td><td>26.9</td></tr>
+    <tr><td>DQN</td><td>DRL</td><td>103.4</td><td>+6.4%</td><td>23.7</td><td>13.4</td></tr>
+    <tr><td>PPO+MLP</td><td>DRL</td><td>103.3</td><td>+6.3%</td><td>26.7</td><td>13.5</td></tr>
+    <tr><td>A3C</td><td>DRL</td><td>102.8</td><td>+5.7%</td><td>30.5</td><td>14.0</td></tr>
+    <tr><td>GA</td><td>Meta-heuristic</td><td>103.4</td><td>+6.4%</td><td>26.6</td><td>13.4</td></tr>
+    <tr><td>PSO</td><td>Meta-heuristic</td><td>103.3</td><td>+6.3%</td><td>27.4</td><td>13.5</td></tr>
+    <tr class="win"><td>PPO+GNN (ของเรา) ⭐</td><td>DRL + GNN</td><td><b>103.7</b></td><td><b>+6.7%</b></td><td><b>24.7</b></td><td><b>13.2</b></td></tr>
+  </table>
+  </div>
+  <div class="slide-num">11 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 10 : TRANSFER LEARNING ══════════════ -->
+<section class="slide">
+  <h2>ทดสอบย้ายเครือข่าย: <span class="grad">NSFNET → Abilene</span></h2>
+  <div class="lead">เทรนบน NSFNET แล้วย้ายไปเครือข่ายใหม่ (Abilene 12 โหนด) — ดูว่า AI ใช้ความรู้เดิมต่อได้ไหม</div>
+  <div class="chart-box"><div class="chart-wrap"><canvas id="chTransfer" class="canvas-lg"></canvas></div></div>
+  <div class="slide-num">12 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 11 : TRANSFER INSIGHT ══════════════ -->
+<section class="slide">
+  <h2>บทเรียนจาก <span class="grad">Transfer Learning</span></h2>
+  <div class="lead">การ "Fine-tune" (ปรับต่อจากความรู้เดิม) ดีที่สุด — ใช้เวลาแค่ 9 นาที</div>
+  <div class="grid3">
+    <div class="card bad">
+      <h3>❌ Zero-Shot (ใช้ของเดิมทันที)</h3>
+      <p>97.3 Mbps (-7.5% แย่กว่า OSPF)<br><br>ย้ายไปเครือข่ายใหม่โดยไม่ปรับอะไรเลย → โครงสร้างต่างกัน (21 → 15 ลิงก์) ทำให้สับสน</p>
+    </div>
+    <div class="card good">
+      <h3>✅ Fine-tune (ปรับต่อ 5k steps)</h3>
+      <p><b>112.6 Mbps (+7.0%)</b> — ดีที่สุด ใช้เวลาแค่ <b>9 นาที</b><br><br>เอาความรู้เดิมมาปรับเข้ากับเครือข่ายใหม่ เร็วและได้ผลดีกว่าเทรนใหม่ทั้งหมด</p>
+    </div>
+    <div class="card warn">
+      <h3>🔄 From Scratch (เทรนใหม่)</h3>
+      <p>104.8 Mbps (-0.4%)<br><br>5k steps ไม่พอให้เรียนรู้ตั้งแต่ศูนย์ → ได้ผลแค่พอๆ กับ OSPF</p>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="box"><div class="v">112.6</div><div class="l">Mbps — Fine-tune ดีที่สุด</div></div>
+    <div class="box blue"><div class="v">9 นาที</div><div class="l">เวลา Fine-tune</div></div>
+    <div class="box red"><div class="v">-7.5%</div><div class="l">Zero-shot ไม่ผ่าน</div></div>
+  </div>
+  <div class="slide-num">13 / 14</div>
+</section>
+
+<!-- ══════════════ SLIDE 12 : CONCLUSION ══════════════ -->
+<section class="slide">
+  <h2>สรุป: <span class="grad">AI จัดเส้นทางได้ดีกว่าวิธีดั้งเดิม</span></h2>
+  <div class="lead">ผลการทดลองทั้งหมดบนมาตรฐานเดียวกัน (topology เดียวกัน ข้อมูลชุดเดียวกัน)</div>
+  <div class="grid3">
+    <div class="card good"><h3>🥇 Throughput</h3><p class="big">+6.7%</p><p>เหนือกว่า OSPF สูงสุดใน 11 วิธี</p></div>
+    <div class="card good"><h3>🥇 Packet Loss</h3><p class="big">-28.8%</p><p>สูญเสียน้อยที่สุด ลดเกือบ 1 ใน 3</p></div>
+    <div class="card"><h3>🥈 Latency</h3><p class="big">-20.2%</p><p>หน่วงลดลงจาก 30.9 → 24.7 ms</p></div>
+  </div>
+  <div class="grid3" style="margin-top:20px">
+    <div class="card"><h3>⚡ ตัดสินใจไว</h3><p>0.013 วินาทีต่อรอบ — พร้อมใช้แบบเรียลไทม์</p></div>
+    <div class="card"><h3>🔁 ย้ายเครือข่ายได้</h3><p>Fine-tune 9 นาที ได้ผลดีกว่า OSPF ทันที</p></div>
+    <div class="card"><h3>🧠 เรียนรู้เอง</h3><p>ไม่ต้องตั้งกฎด้วยมือ — AI ค้นพบเองว่าควรเลี่ยงลิงก์แคบ</p></div>
+  </div>
+  <div class="center" style="margin-top:28px">
+    <div style="padding:12px 28px; border-radius:999px; background:linear-gradient(90deg,rgba(56,189,248,0.15),rgba(34,197,94,0.15)); border:1px solid rgba(56,189,248,0.3); color:#7dd3fc; font-size:15px;">
+      ขอบคุณครับ 🙏
+    </div>
+  </div>
+  <div class="slide-num">14 / 14</div>
+</section>
+
+<script>
+// ---------- Data (จากผลการทดลองจริง) ----------
+const methods = ['OSPF','SP','ECMP','Dijkstra','Load Bal.','DQN','PPO+MLP','A3C','GA','PSO','PPO+GNN ⭐'];
+const throughput = [97.19, 97.19, 97.95, 103.08, 87.06, 103.45, 103.32, 102.76, 103.41, 103.29, 103.66];
+const loss = [18.54, 18.54, 17.90, 13.71, 26.91, 13.39, 13.53, 13.99, 13.43, 13.53, 13.20];
+const latency = [30.88, 30.88, 20.56, 28.70, 7.09, 23.73, 26.70, 30.51, 26.58, 27.41, 24.65];
+
+function barColors(data, winIdx) {
+  return data.map((_, i) => i === winIdx ? 'rgba(34,197,94,0.9)' : 'rgba(56,189,248,0.65)');
+}
+
+Chart.defaults.font.family = "'Inter','Prompt',sans-serif";
+Chart.defaults.color = '#94a3b8';
+
+new Chart(document.getElementById('chThroughput'), {
+  type: 'bar',
+  data: { labels: methods, datasets: [{ label: 'Throughput (Mbps)', data: throughput, backgroundColor: barColors(throughput, 10), borderRadius: 6 }] },
+  options: { responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:(c)=>` ${c.parsed.x.toFixed(2)} Mbps`}} },
+    scales: { x:{ beginAtZero:true, grid:{color:'#1e293b'} }, y:{ grid:{display:false} } } }
+});
+
+new Chart(document.getElementById('chLoss'), {
+  type: 'bar',
+  data: { labels: methods, datasets: [{ label: 'Packet Loss (%)', data: loss, backgroundColor: barColors(loss, 10), borderRadius: 6 }] },
+  options: { responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:(c)=>` ${c.parsed.x.toFixed(2)}%`}} },
+    scales: { x:{ beginAtZero:true, grid:{color:'#1e293b'} }, y:{ grid:{display:false} } } }
+});
+
+new Chart(document.getElementById('chLatency'), {
+  type: 'bar',
+  data: { labels: methods, datasets: [{ label: 'Latency (ms)', data: latency, backgroundColor: barColors(latency, 10), borderRadius: 6 }] },
+  options: { responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:(c)=>` ${c.parsed.x.toFixed(2)} ms`}} },
+    scales: { x:{ beginAtZero:true, grid:{color:'#1e293b'} }, y:{ grid:{display:false} } } }
+});
+
+// Transfer learning chart
+const tMethods = ['Zero-Shot\n(ใช้ของเดิม)', 'From Scratch\n(เทรนใหม่ 5k)', 'OSPF\n(baseline)', 'Fine-tune 5k\n(ของเรา) ⭐', 'Optimal\n(ขอบเขตบน)'];
+const tThroughput = [97.3, 104.8, 105.2, 112.6, 109.7];
+// ---------- Topology interactivity ----------
+function highlightEdges(nid) {
+  document.querySelectorAll('.edge').forEach(e => {
+    const [a, b] = e.dataset.ids.split('-').map(Number);
+    const on = (a === nid || b === nid);
+    if (on) {
+      e.style.filter = 'brightness(1.7) drop-shadow(0 0 5px rgba(255,255,255,0.7))';
+      e.style.strokeWidth = (parseFloat(e.dataset.w) + 2.5) + 'px';
+      e.style.opacity = 1;
+    } else {
+      e.style.filter = 'brightness(0.45)';
+      e.style.opacity = 0.35;
+    }
+  });
+}
+function unhighlight() {
+  document.querySelectorAll('.edge').forEach(e => {
+    e.style.filter = '';
+    e.style.strokeWidth = e.dataset.w + 'px';
+    e.style.opacity = '';
+  });
+}
+
+new Chart(document.getElementById('chTransfer'), {
+  type: 'bar',
+  data: { labels: tMethods, datasets: [{ label: 'Throughput (Mbps)', data: tThroughput,
+    backgroundColor: ['rgba(248,113,113,0.75)','rgba(148,163,184,0.6)','rgba(148,163,184,0.6)','rgba(34,197,94,0.9)','rgba(251,191,36,0.75)'],
+    borderRadius: 8 }] },
+  options: { responsive:true, maintainAspectRatio:false,
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:(c)=>` ${c.parsed.y.toFixed(1)} Mbps`}} },
+    scales: { y:{ beginAtZero:true, grid:{color:'#1e293b'} }, x:{ grid:{display:false} } } }
+});
+</script>
+</body>
+</html>
